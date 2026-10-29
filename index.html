@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>零件圖 PDF → EPC 模式 (多語言支援)</title>
+<title>零件圖 PDF → EPC 模式 (EPC_V1 Optimized)</title>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
@@ -397,53 +397,171 @@ function getTimestamp() {
   return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-/* ================= 翻譯字典 (深度擴充與修正) ================= */
+/* ================= 翻譯字典 (整合日文、印尼文、英文) ================= */
 const TRANSLATIONS = {
-  // 針對圖片中未翻譯的專有名詞
-  'ピースセット': '配件組', 'ピース': '配件', 'スライド': '滑動',
-  'フェイス': '盤面', 'ドライブ': '驅動', 'ボス': '軸套',
-  'ムーバブル': '移動式', 'ローラセット': '滾輪組', 'ウエイト': '配重',
-  'プレート': '板', 'ランプ': '斜坡板', 'ナット': '螺帽',
-  'オイルシール': '油封',
-  
-  // 基礎詞彙與其他常見零件
-  'チェン': '鏈條', 'チエン': '鏈條', 'カムチェン': '凸輪鏈條', 'テンショナー': '張緊器',
-  'シュー': '滑靴', 'カム': '凸輪', 'スプロケット': '鏈輪', 'シリンダー': '汽缸',
-  'シリンダーヘッド': '汽缸頭', 'ピストン': '活塞', 'ピストンリング': '活塞環',
-  'クランクシャフト': '曲軸', 'クランクケース': '曲軸箱', 'スロットルボディ': '節氣門體',
-  'フューエル': '燃油', 'インジェクター': '噴油嘴', 'スロットル': '節氣門',
-  'ブレーキ': '煞車', 'マスターシリンダー': '總泵', 'キャリパー': '卡鉗', 
-  'ディスク': '碟盤', 'パッド': '煞車皮', 'ホイール': '車輪', 'タイヤ': '輪胎', 
-  'リム': '輪框', 'スイングアーム': '搖臂', 'クッション': '避震器', 'ショック': '避震', 
-  'ライト': '燈', 'ランプ': '燈', 'ウィンカー': '方向燈', 'フェンダー': '擋泥板', 
-  'ハーネス': '線束', 'ボディ': '車身', 'タンク': '油箱', 'エアークリーナー': '空氣濾清器', 
-  'キャニスター': '碳罐', 'マフラー': '排氣管', 'エキゾースト': '排氣', 'サイレンサー': '消音器', 
-  'スタンド': '支架', 'ウォーターポンプ': '水泵', 'オイルポンプ': '機油泵', 'ラジエター': '散熱器', 
-  'ファン': '風扇', 'サーモスタット': '節溫器', 'フィルター': '濾清器', 'エレメント': '濾芯',
-  'ドリブンフェイス': '從動盤', 'クラッチ': '離合器', 'ベルト': '皮帶', 'ローラ': '滾輪', 
-  'スターター': '啟動馬達', 'ジェネレーター': '發電機', 'コイル': '線圈', 'プラグ': '火星塞', 
-  'イグニッション': '點火', 'ミッション': '變速箱', 'シャフト': '軸', 'ギア': '齒輪', 
-  'ベアリング': '軸承', 'シール': '油封', 'Oリング': 'O型環', 'サークリップ': 'C型環', 
-  'クリップ': '夾子', 'クランプ': '夾具', 'バンド': '束帶', 'ホース': '軟管', 'パイプ': '管', 
-  'チューブ': '管', 'ポンプ': '泵', 'ケース': '外殼', 'カバー': '蓋', 'ハウジング': '外殼', 
-  'カラー': '襯套', 'ブッシュ': '襯套', 'ラバー': '橡膠', 'ゴム': '橡膠', 'ダンパー': '減震器', 
-  'スプリング': '彈簧', 'ボルト': '螺栓', 'ワッシャー': '墊圈', 'スクリュー': '螺絲', 
-  'ピン': '銷', 'リング': '環', 'ステー': '支架', 'ブラケット': '支架', 'アーム': '臂', 
-  'ロッド': '桿', 'ケーブル': '線纜', 'ワイヤー': '線', 'スイッチ': '開關', 'センサー': '感知器', 
-  'リレー': '繼電器', 'ヒューズ': '保險絲', 'バッテリー': '電瓶', 'レンズ': '透鏡', 
-  'ミラー': '後視鏡', 'メーター': '儀表', 'ハンドル': '把手', 'グリップ': '握把', 'レバー': '拉桿', 
-  'ペダル': '踏板', 'ステップ': '踏板', 'シート': '座墊', 'フレーム': '車架', 'フォーク': '前叉', 
-  'インテーク': '進氣', 'バルブ': '氣門', 'ロッカー': '搖臂', 'ヘッド': '頭', 'カウル': '整流罩', 
-  'スクリーン': '風鏡', 'フロント': '前', 'リア': '後', 'リヤ': '後', 'メイン': '主', 
-  'サブ': '副', 'アウター': '外', 'インナー': '內', 'アッパー': '上', 'ロアー': '下', 
-  'センター': '中', 'COMP.': '總成', 'ASSY.': '總成', 'STD.': '標準', 'O.S.': '加大', 
-  '左': '左', '右': '右', 'マーク': '標誌', 'ラベル': '標籤', 'ツール': '工具', 'リベット': '鉚釘', 
-  'パッキン': '密封墊', 'グロメット': '護圈', 'ダクト': '導管', 'リンク': '連桿', 'ピボット': '樞軸', 
-  'ガイド': '導軌', 'アジャスター': '調整器', 'アジャスティング': '調整', 'リテーナー': '保持器', 
-  'コッター': '夾片', 'ステム': '桿', 'キー': '鑰匙', 'ロック': '鎖', 'オープナー': '開啟器', 
-  'キャップ': '蓋', 'キャッチ': '扣', 'ヒンジ': '鉸鏈', 'スラスト': '止推', 
-  'スナップフィッティング': '快插接頭', 'フィッティング': '接頭', 'ニチアス': 'Nichias', 
-  '大同': '大同', 'ダイト': '大同', 'ブリーザー': '通氣管', 'ブリーザ': '通氣管', '外殻': '外殼'
+  'COVER ASSY., CYLINDER HEAD': '汽缸頭蓋總成', 'GASKET, CYLINDER HEAD COVER': '汽缸頭蓋墊片',
+  'STAY, OXYGEN SENSOR': '氧感知器支架', 'BOLT, FLANGE': '法蘭螺栓', 'HEAD COMP., CYLINDER': '汽缸頭總成',
+  'GUIDE, EX. VALVE(O.S.)': '排氣門導管 (加大)', 'PLATE, CYLINDER HEAD IN.': '汽缸頭進氣側板',
+  'PLATE, CYLINDER HEAD EX.': '汽缸頭排氣側板', 'GASKET, CYLINDER HEAD': '汽缸頭墊片',
+  'PIPE, IN.': '進氣管', 'INSULATOR, THROTTLE BODY': '節氣門體絕緣墊', 'PIPE B, INLET': '進氣管 B',
+  'BAND, INSULATOR': '絕緣墊束環', 'PLUG, SPARK': '火星塞', 'BOLT, STUD': '螺柱',
+  'O-RING, IN. PIPE': '進氣管 O 型環', 'NUT, HEX.': '六角螺帽', 'DOWEL PIN': '定位銷',
+  'STAY COMP., HOSE CLAMPER': '軟管夾支架總成', 'SEAL, VALVE STEM': '汽門桿油封', 'CAMSHAFT COMP.': '凸輪軸總成',
+  'SPROCKET, CAM': '凸輪鏈輪', 'ARM COMP., IN. VALVE ROCKER': '進氣門搖臂總成',
+  'ARM COMP., EX. VALVE ROCKER': '排氣門搖臂總成', 'SHAFT, ROCKER ARM': '搖臂軸',
+  'VALVE, IN.': '進氣門', 'VALVE, EX.': '排氣門', 'SPRING, VALVE': '汽門彈簧',
+  'RETAINER, VALVE SPRING': '汽門彈簧保持器', 'SEAT, EX. VALVE SPRING': '排氣門彈簧座',
+  'COTTER, VALVE': '汽門夾片', 'SCREW, TAPPET ADJUSTING': '汽門間隙調整螺絲',
+  'NUT, TAPPET ADJUSTING': '汽門間隙調整螺帽', 'CHAIN, CAM': '凸輪鏈條',
+  'SHOE, CAM CHAIN TENSIONER': '凸輪鏈條張緊器滑靴', 'LIFTER ASSY., TENSIONER': '張緊器升降器總成',
+  'CAP, TENSIONER LIFTER': '張緊器升降器蓋', 'PIVOT, CAM CHAIN TENSIONER': '凸輪鏈條張緊器樞軸',
+  'GASKET, TENSIONER LIFTER': '張緊器升降器墊片', 'GUIDE, CAM CHAIN': '凸輪鏈條導板',
+  'CYLINDER COMP.': '汽缸總成', 'GASKET, CYLINDER': '汽缸墊片', 'STAY COMP., IGNITION COIL': '點火線圈支架總成',
+  'WASHER, SEALING': '密封墊圈', 'PUMP ASSY., WATER': '水泵總成', 'COVER, WATER PUMP': '水泵蓋',
+  'GASKET, WATER PUMP COVER': '水泵蓋墊片', 'GASKET, WATER PUMP BODY': '水泵體墊片',
+  'THERMOSTAT ASSY.': '節溫器總成', 'SENSOR ASSY., WATER TEMPERATURE': '水溫感知器總成',
+  'FLYWHEEL COMP.': '飛輪總成', 'STATOR COMP.': '定子總成', 'ROTOR SET, OIL PUMP': '機油泵轉子組',
+  'PUMP ASSY., OIL': '機油泵總成', 'GEAR, OIL PUMP DRIVEN': '機油泵從動齒輪', 'BOLT, SPECIAL': '特殊螺栓',
+  'SCREW, TAPPING': '自攻螺絲', 'COVER, L. SIDE': '左側蓋', 'GASKET, L. COVER': '左蓋墊片',
+  'COLLAR': '襯套/軸環', 'DUCT COMP., L. COVER': '左蓋導管總成', 'SEAL, L. COVER': '左蓋油封',
+  'BOLT, SOCKET': '內六角螺栓', 'CIRCLIP, INTERNAL': '內卡環', 'BEARING COMP.': '軸承總成',
+  'CAP COMP., RADIATOR': '散熱器蓋總成', 'RADIATOR ASSY.': '散熱器總成', 'BASE COMP., RADIATOR': '散熱器底座總成',
+  'SEAL, DRAIN': '放水塞油封', 'COVER COMP., RADIATOR': '散熱器蓋總成', 'HOSE A, WATER': '水管 A',
+  'HOSE B, WATER': '水管 B', 'FAN COMP., COOLING': '散熱風扇總成', 'NUT, FENDER SETTING': '擋泥板固定螺帽',
+  'BOLT, DRAIN': '放油塞', 'CLAMP, HOSE': '軟管夾', 'CLAMP, WATER HOSE': '水管夾',
+  'PIECE SET, SLIDE': '滑動件組', 'FACE, DRIVE': '驅動盤面', 'BOSS, DRIVE FACE': '驅動盤軸套',
+  'FACE COMP., MOVABLE DRIVE': '移動驅動盤面總成', 'ROLLER SET, WEIGHT': '配重滾輪組',
+  'PLATE, RAMP': '斜坡板', 'OIL SEAL': '油封', 'OUTER COMP., CLUTCH': '離合器外套總成',
+  'PLATE COMP., DRIVE': '驅動板總成', 'PLATE, CLUTCH SIDE': '離合器側板', 'SPRING, CLUTCH': '離合器彈簧',
+  'WEIGHT SET, CLUTCH': '離合器配重組', 'RUBBER, CLUTCH DAMPER': '離合器減震橡膠', 'BELT, DRIVE': '驅動皮帶',
+  'FACE SET, DRIVEN': '從動盤面組', 'FACE SET, MOVABLE DRIVEN': '移動從動盤面組', 'PIN, ROLLER GUIDE': '滾輪導銷',
+  'ROLLER GUIDE': '滾輪導件', 'SPRING, DRIVEN FACE': '從動彈面彈簧', 'COLLAR, SEAL': '油封套',
+  'COLLAR, SPRING': '彈簧套', 'NUT, SPECIAL': '特殊螺帽', 'CIRCLIP': 'C型環',
+  'BEARING, RADIAL BALL': '徑向滾珠軸承', 'BEARING, NEEDLE': '滾針軸承', 'SEAL, DRIVEN FACE': '從動盤油封',
+  'TUBE, MISSION BREATHER': '變速箱通氣管', 'CASE COMP., MISSION': '變速箱外殼總成',
+  'GASKET, MISSION CASE': '變速箱外殼墊片', 'DRIVESHAFT': '驅動軸', 'COUNTERSHAFT': '副軸',
+  'GEAR, COUNTER': '副軸齒輪', 'GEAR COMP., FINAL': '最終齒輪總成', 'CLIP, TUBE': '管夾',
+  'CRANKCASE COMP., R.': '右曲軸箱總成', 'BUSH, ENGINE HANGER RUBBER': '引擎吊架橡膠襯套',
+  'BUSH, MAIN STAND': '主支架襯套', 'PLATE COMP., RIGIDITY UPPER': '上加強板總成',
+  'PLATE COMP., RIGIDITY LOWER': '下加強板總成', 'BASE, STATOR': '定子底座', 'GASKET, STATOR BASE': '定子底座墊片',
+  'GAUGE, OIL LEVEL': '機油尺', 'CLAMPER, A.C. GENERATOR CORD': '發電機線夾', 'BOLT A, STUD': '螺柱 A',
+  'BOLT B, STUD': '螺柱 B', 'OIL SEAL, 20.8X32X6': '油封 20.8X32X6', 'O-RING': 'O型環',
+  'BOLT, DRAIN PLUG': '放油塞螺栓', 'BEARING, FINAL GEAR SHAFT': '最終齒輪軸軸承',
+  'OIL SEAL, CRANKSHAFT': '曲軸油封', 'OIL SEAL, DRIVESHAFT': '驅動軸油封', 'CRANKSHAFT COMP.': '曲軸總成',
+  'RING SET, PISTON': '活塞環組', 'PISTON': '活塞', 'PIN, PISTON': '活塞銷', 'CLIP, PISTON PIN': '活塞銷夾',
+  'KEY, WOODRUFF': '半月鍵', 'SENSOR SET': '感知器組', 'O-RING, THROTTLE BODY': '節氣門體O型環',
+  'STAY, WIRE': '電線支架', 'COVER COMP., THROTTLE BODY': '節氣門體蓋總成', 'THROTTLE BODY ASSY.': '節氣門體總成',
+  'BODY SET': '本體組', 'VALVE SET, IDLE AIR CONTROL': '怠速空氣控制閥組', 'INJECTOR ASSY., FUEL': '燃油噴射器總成',
+  'RING, SEAL': '密封環', 'CLAMPER, BREATHER TUBE': '通氣管夾', 'JOINT COMP., INJECTOR': '噴射器接頭總成',
+  'COLLAR, THROTTLE BODY COVER': '節氣門體蓋襯套', 'SCREW, PAN': '盤頭螺絲', 'SCREW-WASHER': '帶墊螺絲',
+  'LIGHT ASSY., FR. COMBINATION': '前組合燈總成', 'METER ASSY., COMBINATION': '組合儀表總成',
+  'METER COMP., LCD': 'LCD儀表', 'CASE ASSY., UPPER': '上殼總成', 'CASE ASSY., UNDER': '下殼總成',
+  'CAP, LOCK NUT': '鎖緊螺帽蓋', 'MIRROR COMP.': '後視鏡總成', 'BOLT, ADAPTER': '轉接螺栓',
+  'CABLE, THROTTLE': '節氣門線纜', 'CLAMPER, THROTTLE CABLE': '節氣門線纜夾', 'CABLE COMP. A, THROTTLE': '節氣門線纜總成 A',
+  'CABLE COMP. B, THROTTLE': '節氣門線纜總成 B', 'SWITCH ASSY., STARTER & HAZARD & IDLE STOP': '啟動/警示/怠速熄火開關總成',
+  'SWITCH ASSY., DIMMER & HORN & WINKER': '遠近光/喇叭/方向燈開關總成', 'GRIP COMP., THROTTLE': '節氣門握把總成',
+  'GRIP, L. HANDLE': '左把手握把', 'CLAMP, HARNESS': '線束夾', 'SWITCH ASSY., FR. STOP': '前煞車開關總成',
+  'HOSE COMP. A, FR. BRAKE': '前煞車油管總成 A', 'HOSE COMP. B, FR. BRAKE': '前煞車油管總成 B',
+  'CLAMPER A, FR. BRAKE HOSE': '前煞車油管夾 A', 'CLAMPER B, FR. BRAKE HOSE': '前煞車油管夾 B',
+  'CLAMPER C, FR. BRAKE HOSE': '前煞車油管夾 C', 'BOOT COMP.': '防塵套總成',
+  'CYLINDER SUB ASSY., FR. BRAKE MASTER': '前煞車總泵汽缸副總成', 'PROTECTOR': '保護蓋',
+  'CAP, MASTER CYLINDER': '總泵蓋', 'HOLDER, MASTER CYLINDER': '總泵固定座', 'DIAPHRAGM': '膜片',
+  'PLATE, DIAPHRAGM': '膜片固定板', 'CYLINDER SET, MASTER': '總泵汽缸組', 'LEVER, R. STEERING HANDLE': '右方向把拉桿',
+  'BOLT, FLANGE SOCKET': '法蘭內六角螺栓', 'BOLT, HANDLE LEVER PIVOT': '把手拉桿樞軸螺栓', 'BOLT, OIL': '油管螺栓',
+  'WASHER, OIL BOLT': '油管螺栓墊圈', 'SCREW, FLAT': '平頭螺絲', 'NUT, FLANGE': '法蘭螺帽',
+  'SWITCH ASSY., L. HANDLE STOP': '左把手煞車開關總成', 'COVER, STOP SWITCH': '煞車開關蓋',
+  'HOSE COMP. A, RR. BRAKE': '後煞車油管總成 A', 'CYLINDER SUB ASSY., RR. MASTER': '後煞車總泵汽缸副總成',
+  'LEVER, L. HANDLE': '左把手拉桿', 'PIPE, RR. BRAKE': '後煞車油管', 'HOSE B, RR. BRAKE': '後煞車油管 B',
+  'HOSE A, FRONT BRAKE SUB': '前煞車副油管 A', 'VALVE, DELAY': '延遲閥', 'CLAMPER A, RR. BRAKE HOSE': '後煞車油管夾 A',
+  'CLAMPER B, RR. BRAKE HOSE': '後煞車油管夾 B', 'CLAMPER C, RR. BRAKE HOSE': '後煞車油管夾 C',
+  'PIPE COMP., RR. BRAKE': '後煞車管總成', 'HOSE COMP. B, RR. BRAKE': '後煞車油管總成 B', 'HOSE COMP., BRAKE SUB': '煞車副油管總成',
+  'VALVE ASSY., DELAY': '延遲閥總成', 'STAY, ABS MODULATOR': 'ABS調節器支架', 'MODULATOR ASSY.': 'ABS調節器總成',
+  'CLAMP, BRAKE PIPE': '煞車管夾', 'PIPE, STEERING HANDLE': '轉向把手管', 'WEIGHT A, HANDLE': '把手配重 A',
+  'POST COMP., HANDLE': '把手立柱總成', 'HOLDER, HANDLE UNDER': '把手下固定座', 'HOLDER, HANDLE UPPER': '把手上固定座',
+  'COVER, HANDLE RR.': '後把手蓋', 'COVER COMP., HANDLE RR.': '後把手蓋總成', 'EMBLEM, PRODUCT': '產品徽章',
+  'NUT, U': 'U型螺帽', 'COLLAR A, HANDLE SETTING': '把手固定襯套 A', 'WASHER': '墊圈',
+  'COLLAR B, HANDLE SETTING': '把手固定襯套 B', 'CAP, SOCKET BOLT': '內六角螺栓蓋', 'RACE, STEERING TOP BALL': '轉向上鋼珠座',
+  'RACE, STEERING BOTTOM BALL': '轉向下鋼珠座', 'NUT, STEERING STEM LOCK': '轉向主軸鎖緊螺帽',
+  'BALL ASSY., STEERING': '轉向鋼珠總成', 'BALL ASSY., STEERING STEEL': '轉向鋼珠總成 (鋼)',
+  'RACE, STEERING TOP CONE': '轉向上鋼珠錐座', 'RACE, STEERING BOTTOM CONE': '轉向下鋼珠錐座',
+  'DUST SEAL, STEERING HEAD': '轉向頭防塵封', 'WASHER, STEERING HEAD DUST': '轉向頭防塵墊圈',
+  'THREAD COMP., STEERING HEAD': '轉向頭螺紋總成', 'FENDER SET, FR.': '前擋泥板組', 'COLLAR, FR. FENDER': '前擋泥板襯套',
+  'RUBBER, RR. FENDER CUSHION': '後擋泥板緩衝橡膠', 'COLLAR, TAILLIGHT MOUNTING': '尾燈固定襯套',
+  'BOOT, HEADLIGHT BRACKET': '頭燈支架防塵套', 'BRACKET COMP., FR. NUMBER PLATE': '前牌支架總成',
+  'GUARD, NUMBER PLATE': '車牌護板', 'WINDSCREEN SET': '風鏡組', 'COVER, FR. UPPER': '前上蓋',
+  'COVER, FR. RIGHT': '右前蓋', 'COVER, FR. LEFT': '左前蓋', 'COVER, FR. CENTER': '前中央蓋',
+  'COVER, FR. LOWER': '前下蓋', 'ADJUSTER, WINDSCREEN': '風鏡調整器', 'STAY, WINDSCREEN': '風鏡支架',
+  'HOLDER, WINDSCREEN': '風鏡固定座', 'SWITCH, MULTI': '多功能開關', 'COVER, MULTI SWITCH': '多功能開關蓋',
+  'COVER SET, R. FR. SIDE': '右前側蓋組', 'COVER SET, L. FR. SIDE': '左前側蓋組', 'LINK ASSY., SCREEN ADJUST': '風鏡調整連桿總成',
+  'RIVET, PUSH': '按壓式鉚釘', 'NUT, WELL': '沉頭螺帽', 'NUT, CLIP': '夾片螺帽', 'WASHER, THRUST': '止推墊圈',
+  'WASHER, NYLON': '尼龍墊圈', 'CLIP, SNAP FITTING': '卡扣', 'BRACKET, ADJUST SCREEN': '風鏡調整支架',
+  'HOLDER, SCREEN': '風鏡固定座', 'LINK, ARM': '臂連桿', 'KNOB, ADJUST LOCK': '鎖定調整鈕',
+  'SHAFT A, PIVOT': '樞軸 A', 'SHAFT B, PIVOT': '樞軸 B', 'CLIP': '夾子', 'SPRING, ADJUST PIVOT': '調整樞軸彈簧',
+  'STOPPER, ADJUST KNOB': '調整鈕擋塊', 'SPRING, ASSIST': '輔助彈簧', 'LID, R. SCREEN HOLDER': '右風鏡固定座蓋',
+  'LID, L. SCREEN HOLDER': '左風鏡固定座蓋', 'SWITCH ASSY., MULTI': '多功能開關總成', 'COVER SET, L. BODY': '左車身蓋組',
+  'COVER SET, L. BODY SIDE': '左車身側蓋組', 'COVER SET, RR. CENTER': '後中央蓋組', 'BOX, LUGGAGE': '置物箱',
+  'GUARD, RR. SPLASH': '後防濺護板', 'COVER, BATTERY': '電瓶蓋', 'BOLT, FR. FENDER FIXING': '前擋泥板固定螺栓',
+  'PAD SET, FR.': '前煞車皮組', 'SCREW, BLEEDER': '放氣螺絲', 'CAP, BLEEDER': '放氣螺絲蓋', 'PISTON A': '活塞 A',
+  'SPRING, PAD': '煞車皮彈簧', 'RING, STOPPER': '擋環', 'BOLT, PIN': '銷螺栓', 'BOOT, PIN BUSH': '銷襯套防塵套', 'BOOT B': '防塵套 B',
+  'CALIPER SUB ASSY., L. FR.': '左前煞車卡鉗副總成', 'BRACKET SUB ASSY., L. FR.': '左前支架副總成', 'PISTON B': '活塞 B',
+  'PIN, HANGER': '懸掛銷', 'WASHER, WAVE': '波形墊圈', 'BOLT, TORX': '星型螺栓', 'SENSOR, FR. WHEEL SPEED': '前輪速感知器',
+  'VALVE, RIM': '輪圈氣門嘴', 'AXLE, FR. WHEEL': '前輪軸', 'COLLAR, FR. WHEEL SIDE': '前輪側襯套', 'RING, FR. PULSER': '前脈衝環',
+  'COLLAR, FR. AXLE DISTANCE': '前軸距襯套', 'WHEEL SUB ASSY., FR.': '前輪副總成', 'TIRE, FR.': '前輪胎', 'DISK, FR. BRAKE': '前煞車碟盤',
+  'DUST SEAL': '防塵封', 'PAD SET, RR. BRAKE': '後煞車皮組', 'SEAL SET, PISTON': '活塞油封組', 'BRACKET COMP., RR.': '後支架總成',
+  'CALIPER SUB ASSY., RR.': '後煞車卡鉗副總成', 'COVER, DUST': '防塵蓋', 'PIN B': '銷 B', 'CUSHION ASSY., R. RR.': '右後避震總成',
+  'COLLAR, RUBBER BUSH': '橡膠襯套', 'BUSH, UPPER RUBBER': '上橡膠襯套', 'MARK, SHOWA': 'SHOWA 標誌',
+  'CUSHION ASSY., L. RR.': '左後避震總成', 'WINKER ASSY., R. FR.': '右前方向燈總成', 'RUBBER, R. WINKER MOUNTING': '右方向燈固定橡膠',
+  'COLLAR, WINKER': '方向燈襯套', 'WINKER ASSY., L. FR.': '左前方向燈總成', 'RUBBER, L. WINKER MOUNTING': '左方向燈固定橡膠',
+  'WINKER ASSY., R. RR.': '右後方向燈總成', 'WINKER ASSY., L. RR.': '左後方向燈總成', 'TAILLIGHT UNIT': '尾燈單元',
+  'LIGHT ASSY, LICENSE': '牌照燈總成', 'CLIP, COUPLER': '接頭夾', 'STAY, REAR FENDER': '後擋泥板支架',
+  'FENDER A, REAR': '後擋泥板 A', 'COVER, TAILLIGHT :UNDER': '尾燈下蓋', 'FENDER C, REAR': '後擋泥板 C',
+  'FENDER, REAR :UPPER': '後擋泥板上部', 'FENDER, REAR :LOWER': '後擋泥板下部', 'REFLECTOR, REFLEX': '反光片',
+  'BRACKET, RR. FENDER': '後擋泥板支架', 'COVER, RR. CENTER LOWER': '後中央下蓋', 'BATTERY': '電瓶',
+  'COLLAR, RR. FENDER': '後擋泥板襯套', 'BOX, BATTERY': '電瓶盒', 'TUBE, BATTERY DRAIN': '電瓶排液管',
+  'BODY COMP., FRAME': '車架總成', 'STAY, R. FR. COVER': '右前蓋支架', 'STAY, L. FR. COVER': '左前蓋支架',
+  'GUIDE, BRAKE HOSE': '煞車油管導件', 'NUT, FR. COVER STAY': '前蓋支架螺帽', 'COLLAR COMP., FR.': '前部襯套總成',
+  'STAY B, BRAKE HOSE JOINT': '煞車油管接頭支架 B', 'STAY, DELAY VALVE': '延遲閥支架', 'LINK ASSY., ENGINE HANGER': '引擎吊架連桿總成',
+  'RUBBER, STOPPER': '緩衝橡膠', 'STAY COMP., ECU': 'ECU支架總成', 'RUBBER, HEADLIGHT CASE MOUNTING': '頭燈殼固定橡膠',
+  'GROMMET, SEAT LOCK CABLE': '座墊鎖拉線護圈', 'GROMMET, SIDE COVER': '側蓋護圈', 'CAP, RESERVE TANK': '副水箱蓋',
+  'TANK, RESERVE': '副水箱', 'TUBE, RESERVE TANK': '副水箱水管', 'DRIVER, GRIP': '起子，握把', 'SPANNER': '扳手',
+  'WRENCH, BOX': '套筒扳手', 'BAG, TOOL': '工具袋', 'LABEL, COOLANT INFORMATION': '冷卻液信息標籤',
+  'LABEL, TIRE & DRIVE & CARGO': '輪胎/傳動/載重標籤', 'LABEL, AIR CLEANER ELEMENT': '空氣濾清器濾芯標籤',
+  'LABEL, ABS INFORMATION': 'ABS信息標籤', 'LABEL, FUEL & DRIVE': '燃油/傳動標籤', 'MARK, HONDA': 'HONDA 標誌',
+  'MARK, ENGINE': '引擎標誌', 'MARK, ABS': 'ABS 標誌', 'MARK(COMBI BRAKE)': '聯動煞車標誌', 'MARK(HSTC)': 'HSTC 標誌',
+  'EMBLEM(ADV160)': 'ADV160 徽章', 'TUBE, DRAIN': '排放管', 'COVER ASSY, ENGINE TOP': '引擎上蓋總成',
+  'SEAL, ENGINE TOP COVER': '引擎上蓋油封', 'JET COMP, PISTON': '活塞噴油嘴總成', 'COVER, OIL FILTER': '機油濾清器蓋',
+  'SCREEN, OIL FILTER': '機油濾清器網', 'SPRING, OIL FILTER SCREEN': '機油濾清器網彈簧', 'PROTECTOR, SPEED SENSOR': '速度感知器保護蓋',
+  'SENSOR ASSY, SPEED': '速度感知器總成', 'OIL SEAL, 26X45X6': '油封 26X45X6', 'OIL SEAL, 28X32X6': '油封 28X32X6',
+  'OIL SEAL, 20X32X6': '油封 20X32X6', 'WASHER, DRAIN PLUG': '放油塞墊圈', 'SENSOR, THROTTLE': '節氣門感知器',
+  'BODY ASSY., THROTTLE': '節氣門體總成', 'BODY, THROTTLE': '節氣門體', 'VALVE, IDLE AIR CONTROL': '怠速空氣控制閥', 'INJECTOR, FUEL': '燃油噴射器',
+  'カバー 左サイド': '左側蓋', 'ガスケット 左カバー': '左蓋墊片', '左サイド': '左側', '左カバー': '左蓋',
+  'カバー': '蓋', 'サイド': '側', 'ガスケット': '墊片', 'ニチアス': 'Nichias', '大同': '大同', 'ダイト': '大同', 'ダイト-': '大同', 'ダ イト': '大同',
+  'ワッシャー': '墊圈', 'スラスト': '止推', 'スナップフィッティング': '快插接頭', 'フィッティング': '接頭',
+  'カムチェンテンショナー': '凸輪鏈條張緊器', 'カムチェン': '凸輪鏈條', 'シュー': '滑靴', 'カム': '凸輪', 'チェン': '鏈條', 'チェーン': '鏈條',
+  'スプロケット': '鏈輪', 'テンショナー': '張緊器', 'シリンダーヘッド': '汽缸頭', 'シリンダー': '汽缸', 'ピストン': '活塞', 'ピストンリング': '活塞環',
+  'クランクシャフト': '曲軸', 'クランクケース': '曲軸箱', 'スロットルボディ': '節氣門體', 'フューエルインジェクター': '燃油噴射器',
+  'インジェクター': '噴油嘴', 'スロットル': '節氣門', 'ブレーキ': '煞車', 'マスターシリンダー': '總泵', 'キャリパー': '卡鉗', 'ディスク': '碟盤',
+  'パッド': '煞車皮', 'ホイール': '車輪', 'タイヤ': '輪胎', 'リム': '輪框', 'スイングアーム': '搖臂', 'クッション': '避震器', 'ショック': '避震',
+  'コンビネーションライト': '尾燈', 'ライト': '燈', 'ランプ': '燈', 'ウィンカー': '方向燈', 'フェンダー': '擋泥板', 'ハーネス': '線束',
+  'フォブキー': '智能鑰匙', 'ボディ': '車身', 'リザーブタンク': '副水箱', 'エンブレム': '徽章', 'エアークリーナー': '空氣濾清器',
+  'キャニスター': '碳罐', 'マフラー': '排氣管', 'エキゾースト': '排氣', 'サイレンサー': '消音器', 'スタンド': '支架', 'ウォーターポンプ': '水泵',
+  'オイルポンプ': '機油泵', 'ラジエター': '散熱器', 'ファン': '風扇', 'サーモスタット': '節溫器', 'オイルフィルター': '機油濾清器',
+  'フィルター': '濾清器', 'エレメント': '濾芯', 'ドライブフェイス': '驅動盤', 'ドリブンフェイス': '從動盤', 'フェイス': '盤面', 'クラッチ': '離合器',
+  'ベルト': '皮帶', 'ローラ': '滾輪', 'ウエイト': '配重', 'スターター': '啟動馬達', 'ジェネレーター': '發電機', 'マグネトー': '磁電機',
+  'コイル': '線圈', 'プラグ': '火星塞', 'イグニッション': '點火', 'トランスミッション': '變速箱', 'ミッション': '變速箱', 'シャフト': '軸',
+  'ギア': '齒輪', 'ベアリング': '軸承', 'シール': '油封', 'オイルシール': '油封', 'Oリング': 'O型環', 'サークリップ': 'C型環',
+  'クリップ': '夾子', 'クランプ': '夾具', 'バンド': '束帶', 'ホース': '軟管', 'パイプ': '管', 'チューブ': '管', 'タンク': '油箱', 'ポンプ': '泵',
+  'ケース': '外殼', 'ハウジング': '外殼', 'カラー': '襯套', 'ブッシュ': '襯套', 'ラバー': '橡膠', 'ゴム': '橡膠', 'ダンパー': '減震器',
+  'スプリング': '彈簧', 'ボルト': '螺栓', 'ナット': '螺帽', 'スクリュー': '螺絲', 'ピン': '銷', 'リング': '環', 'ステー': '支架', 'ブラケット': '支架',
+  'アーム': '臂', 'ロッド': '桿', 'ケーブル': '線纜', 'ワイヤー': '線', 'スイッチ': '開關', 'センサー': '感知器', 'リレー': '繼電器',
+  'ヒューズ': '保險絲', 'バッテリー': '電瓶', 'レンズ': '透鏡', 'ミラー': '後視鏡', 'メーター': '儀表', 'ハンドル': '把手', 'グリップ': '握把',
+  'レバー': '拉桿', 'ペダル': '踏板', 'ステップ': '踏板', 'シート': '座墊', 'フレーム': '車架', 'フォーク': '前叉', 'インテーク': '進氣',
+  'バルブ': '氣門', 'ロッカー': '搖臂', 'ヘッド': '頭', 'カウル': '整流罩', 'スクリーン': '風鏡', 'フロント': '前', 'リア': '後', 'リヤ': '後',
+  'メイン': '主', 'サブ': '副', 'アウター': '外', 'インナー': '內', 'アッパー': '上', 'ロアー': '下', 'センター': '中', 'COMP.': '總成',
+  'ASSY.': '總成', 'STD.': '標準', 'O.S.': '加大', '左': '左', '右': '右', 'マーク': '標誌', 'ラベル': '標籤', 'ツール': '工具',
+  'リベット': '鉚釘', 'パッキン': '密封墊', 'グロメット': '護圈', 'ダクト': '導管', 'プレート': '板', 'リンク': '連桿', 'ボス': '軸套',
+  'ピボット': '樞軸', 'ガイド': '導軌', 'アジャスター': '調整器', 'アジャスティング': '調整', 'リテーナー': '保持器', 'コッター': '夾片',
+  'ステム': '桿', 'キー': '鑰匙', 'ロック': '鎖', 'オープナー': '開啟器', 'キャップ': '蓋', 'キャッチ': '扣', 'ヒンジ': '鉸鏈', 'スラスト': '止推'
 };
 
 function translateText(text) {
@@ -477,7 +595,8 @@ function translateText(text) {
 }
 
 /* ================= 資料層 ================= */
-const PART_REGEX = /\b[A-Z0-9]{3,7}\s*[-－–—\s]\s*[A-Z0-9]{2,6}(?:\s*[-－–—\s]\s*[A-Z0-9]{2,8}){0,2}\b/gi;
+// 🎯 恢復寬容的正則匹配，確保 5-3-3 或 4-3-4 等格式都能抓取
+const PART_REGEX = /\b[A-Z0-9]{3,7}\s*[-－–—]\s*[A-Z0-9]{2,6}(?:\s*[-－–—]\s*[A-Z0-9]{2,8}){0,2}\b/gi;
 const partInfoMap = new Map();          
 const pagePartKeys = new Map();         
 const pageTitles = new Map();           
@@ -494,6 +613,7 @@ function normalizeText(t) {
 }
 function parsePartNo(rawStr) {
   let cleanStr = normalizeText(rawStr);
+  // 🎯 恢復了字首截斷邏輯，處理如 181250-K1Z-J10 這種情況
   if (!cleanStr.includes('-')) return { partNo: cleanStr, itemNo: '' };
   let parts = cleanStr.split('-'), itemNo = '';
   if (parts.length >= 2) {
@@ -502,16 +622,13 @@ function parsePartNo(rawStr) {
       itemNo = first.substring(0, first.length - 5); 
       parts[0] = first.substring(first.length - 5); 
     }
-    else if (first.length === 4 && /[A-Z]/.test(first)) { 
-      itemNo = first[0]; 
-      parts[0] = first.substring(1); 
-    }
   }
   return { partNo: parts.join('-'), itemNo };
 }
 
 /* ================= 縮放與原生滑動 ================= */
-const RENDER_SCALE = (window.innerWidth <= 1024) ? 1.5 : 2;
+// 🎯 關鍵修正：為了避免手機載入超大檔案時記憶體溢出，動態降低手機端的渲染倍率
+const RENDER_SCALE = (window.innerWidth <= 1024) ? 1.2 : 2;
 let scale = 1;
 const viewport = $('pdfViewport');
 const container = $('pdfContainer');
@@ -660,7 +777,7 @@ const handleDecrypt = async (e) => {
     let pdfDoc = null;
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
-      const vpR = page.getViewport({ scale: 2.0 });
+      const vpR = page.getViewport({ scale: 2.0, rotation: 0 }); // 🎯 強制 rotation: 0
       const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
       canvas.width = vpR.width; canvas.height = vpR.height;
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -730,7 +847,8 @@ async function loadPdf(file) {
       $('progressBar').style.width = `${(i / pdf.numPages) * 100}%`;
       
       const page = await pdf.getPage(i);
-      const vpPDF = page.getViewport({ scale: RENDER_SCALE });
+      // 🎯 關鍵修正：強制 rotation: 0，這能徹底解決某些手機上文字層旋轉90度的問題
+      const vpPDF = page.getViewport({ scale: RENDER_SCALE, rotation: 0 });
       const tc = await page.getTextContent();
       
       const pageIndex = i - 1;
@@ -758,6 +876,9 @@ async function loadPdf(file) {
       pageDiv.appendChild(textLayerDiv);
       await pdfjsLib.renderTextLayer({ textContent: tc, container: textLayerDiv, viewport: vpPDF, textDivs: [] }).promise;
       highlightPartNumbers(textLayerDiv);
+
+      // 🎯 關鍵修正：每處理完一頁，強制要求瀏覽器清理該頁的 PDF 快取
+      page.cleanup();
     }
     
     rebuildAssemblyOptions();
@@ -774,7 +895,7 @@ async function loadPdf(file) {
   } finally { loadingEl.classList.remove('show'); }
 }
 
-/* ================= 解析邏輯 (🚀 核心修正：精準抓取左側項次) ================= */
+/* ================= 解析邏輯 ================= */
 function parsePageData(items, pageIndex) {
   if (!items || !items.length) return { keys: [], title: `第 ${pageIndex + 1} 頁` };
   
@@ -793,11 +914,14 @@ function parsePageData(items, pageIndex) {
     line.items.sort((a, b) => a.transform[4] - b.transform[4]);
     const t = line.items.map(i => i.str).join(' ').trim();
     
+    // 🎯 新增：排除表頭和無意義的數字行，避免抓到錯誤的標題
+    if (/No\.\s*Ref/i.test(t) || /^\d+(\s+\d+)*$/.test(t) || /E-\d+\s+No/i.test(t)) continue;
+
     const match = t.match(/^([A-Z]-\d+(?:-\d+)?)\s+(.+)/i);
     if (match) {
       pageCategory = `${match[1]} ${match[2].substring(0, 15)}`; 
       break;
-    } else if (/FIG\.\s*\d+/i.test(t) || /圖\s*\d+/i.test(t)) { 
+    } else if (/FIG\.\s*\d+/i.test(t) || /圖\s*\d+/i.test(t) || /KELOMPOK/i.test(t)) { 
       if (t.length < 80) { pageCategory = t.replace(/\s+/g, ' '); break; } 
     }
   }
@@ -809,41 +933,48 @@ function parsePageData(items, pageIndex) {
     line.items.sort((a, b) => a.transform[4] - b.transform[4]);
     const lineText = line.items.map(i => i.str).join(' ').trim();
     
-    if (/部品|名稱|名称|項次|DR\d+|備註|番號|Deskripsi|No\.\s*Part|No\.\s*Ref|Jumlah|Kode Parts/i.test(lineText)) return;
+    // 忽略表頭
+    if (/部品|名稱|名称|項次|DR\d+|備註|番號|Deskripsi|No\.\s*Part|No\.\s*Ref|Jumlah|Kode Parts|Nama part|No\. Part/i.test(lineText)) return;
 
     let partNo = null, partIdx = -1, detectedItemNo = '';
     let rawMatchStr = '';
     
-    // 🚀 修正 1：尋找零件號，允許連字號或空格作為分隔
     for (let i = 0; i < line.items.length; i++) {
-      const m = new RegExp(PART_REGEX.source, 'gi').exec(line.items[i].str);
+      const itemStr = line.items[i].str;
+      // 使用寬容的正則來比對
+      const m = new RegExp(PART_REGEX.source, 'i').exec(itemStr);
       if (m) {
         rawMatchStr = m[0];
-        const p = parsePartNo(m[0]); partNo = p.partNo;
-        partIdx = i; break;
+        partNo = parsePartNo(m[0]).partNo;
+        partIdx = i;
+        
+        // 🎯 修正 1：向左尋找獨立的項次 (適用於 Honda 排版)
+        for (let j = partIdx - 1; j >= 0; j--) {
+          const t = line.items[j].str.trim();
+          if (/^\d{1,3}$/.test(t)) {
+            detectedItemNo = t;
+            break;
+          }
+        }
+        // 🎯 修正 2：檢查同一字串前方是否帶有項次 (如 "1 81250-K1Z-J10")
+        if (!detectedItemNo) {
+          const prefixMatch = itemStr.substring(0, m.index).match(/(\d{1,3})\s*$/);
+          if (prefixMatch) detectedItemNo = prefixMatch[1];
+        }
+        break;
       }
     }
     if (!partNo) return;
 
-    let partName = '', qty = 1, itemNo = '';
+    if (detectedItemNo) lastItemNo = detectedItemNo;
+    else detectedItemNo = lastItemNo;
 
-    // 🚀 修正 2：智慧抓取左側的「項次 (Item No)」
-    if (partIdx > 0) {
-      for (let i = partIdx - 1; i >= 0; i--) {
-        const t = line.items[i].str.trim();
-        // 只要找到 1~999 之間，且不是座標的數字，就當作項次
-        if (/^\d{1,3}$/.test(t)) {
-          itemNo = t;
-          break;
-        }
-      }
-    }
+    let partName = '', qty = 1, itemNo = detectedItemNo;
     
-    if (itemNo) lastItemNo = itemNo;
-    else itemNo = lastItemNo;
-    
-    // 🚀 修正 3：抓取數量 (限制 1~99)
     const rightItems = line.items.slice(partIdx + 1);
+    const nameTokens = [];
+    
+    // 限制數量上限，只接受 1~99 的數字
     for (let i = 0; i < rightItems.length; i++) {
       const t = rightItems[i].str.trim();
       if (/^\d{1,2}$/.test(t)) { 
@@ -852,10 +983,13 @@ function parsePageData(items, pageIndex) {
       }
     }
 
-    const nameTokens = [];
     for (let i = 0; i < rightItems.length; i++) {
       let t = rightItems[i].str.trim();
       if (!t) continue;
+      
+      // 🎯 修正 3：遇到下一個零件號就停止抓取名稱，避免把後面的零件號串進名稱
+      if (new RegExp(PART_REGEX.source, 'i').test(t)) break;
+
       if (/^[\d\s,]+$/.test(t)) continue; 
       if (/^[\-\.\s]+$/.test(t)) continue;  
       if (/^[\(\)\[\]\{\}\s]*$/.test(t)) continue;
@@ -872,6 +1006,8 @@ function parsePageData(items, pageIndex) {
     }
 
     let nameStr = nameTokens.join(' ').replace(/,\s*/g, ', ').trim();
+    
+    // 強制清理結尾的點點與多餘空白
     nameStr = nameStr.replace(/[.．\-\s]+$/, '').trim();
 
     if (nameStr) {
@@ -889,7 +1025,7 @@ function parsePageData(items, pageIndex) {
     if (!partInfoMap.has(key)) {
       partInfoMap.set(key, { 
         name: partName, 
-        rawName: nameStr, 
+        rawName: nameStr, // 儲存原始名稱，供搜尋使用
         qty, 
         category: pageCategory || '未分類', 
         itemNo 
@@ -1099,7 +1235,7 @@ $('btnNextPage').addEventListener('click', () => {
 });
 
 
-/* ================= 零件清單渲染 ================= */
+/* ================= 零件清單渲染 (完美顯示項次) ================= */
 function renderPartList(mode = 'page', pageIdx = 0) {
   const box = $('partList');
   let keys = [];
