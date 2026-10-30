@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>零件圖 PDF → EPC 模式 (EPC_V1 Optimized)</title>
+<title>零件圖 PDF → EPC 模式 (EPC_V15 Final)</title>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <style>
   :root{
     --bg:#f5f6f8; --panel:#fff; --line:#e3e6ea; --text:#1f2933; --muted:#7b8794;
@@ -14,13 +15,11 @@
   }
   *{box-sizing:border-box;}
   
-  /* 🎯 徹底防止手機長按彈出選單 */
   * {
     -webkit-touch-callout: none !important;
     -webkit-user-select: none !important;
     user-select: none !important;
   }
-  /* 允許輸入框正常選取 */
   input, textarea {
     -webkit-touch-callout: default !important;
     -webkit-user-select: text !important;
@@ -38,7 +37,6 @@
 
   .left-pane { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; min-height: 0; }
 
-  /* 🎯 頂部單一工具列：整合搜尋、縮放、上傳 */
   .epc-toolbar {
     display: flex; align-items: center; justify-content: space-between; gap: 6px;
     padding: 6px 8px; background: #fff; border-bottom: 1px solid var(--line);
@@ -68,10 +66,27 @@
   .pdf-controls input::-webkit-outer-spin-button, .pdf-controls input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .pdf-controls span { font-size: 12px; font-weight: 600; margin-left: 1px; }
   
-  .upload-btn-wrapper { position: relative; display: flex; width: 32px; height: 32px; border-radius: 6px; overflow: hidden; cursor: pointer; background: #f1f5f9; border: 1px solid #cbd5e1; flex: none; }
-  .upload-btn-wrapper input[type="file"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 10; font-size: 100px; }
-  .upload-btn-wrapper .action-btn { pointer-events: none; display: grid; place-items: center; width: 100%; height: 100%; font-size: 15px; }
-  .upload-btn-wrapper:hover .action-btn { background: #e2e8f0; }
+  .menu-wrapper { position: relative; flex: none; }
+  .menu-toggle-btn {
+    display: flex; width: 32px; height: 32px; border-radius: 6px;
+    background: #f1f5f9; border: 1px solid #cbd5e1; color: var(--epc-blue);
+    font-size: 18px; font-weight: bold; cursor: pointer; align-items: center; justify-content: center;
+    transition: 0.2s;
+  }
+  .menu-toggle-btn:hover { background: #e2e8f0; }
+  
+  .dropdown-menu {
+    display: none; position: absolute; right: 0; top: 100%; margin-top: 6px;
+    background: #fff; border: 1px solid #cbd5e1; border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; width: 210px; flex-direction: column;
+  }
+  .dropdown-menu.open { display: flex; }
+  .menu-item {
+    padding: 10px 14px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid #f1f3f5; color: var(--text); transition: background 0.15s;
+  }
+  .menu-item:last-child { border-bottom: none; }
+  .menu-item:hover { background: #f0f6ff; }
 
   .pdf-viewport-wrapper {
     flex: 1;
@@ -99,13 +114,26 @@
   .textLayer { position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: hidden; line-height: 1; transform-origin: 0 0; pointer-events: none; }
   .textLayer > span { color: transparent; position: absolute; white-space: pre; cursor: inherit; transform-origin: 0% 0%; pointer-events: none; }
 
-  .textLayer > span.part-hit, .textLayer .part-hit-inner {
-    background: rgba(255, 235, 59, 0.6) !important;
-    border-radius: 2px; cursor: pointer !important; pointer-events: auto !important;
-    transition: background .15s, box-shadow .15s;
-    color: transparent !important; z-index: 2; display: inline;
+  /* 🎯 針對高亮進行優化：移除外層背景，只高亮內層文字 */
+  .textLayer > span.part-hit {
+    background: transparent !important;
+    cursor: pointer !important; pointer-events: auto !important;
+    color: transparent !important; z-index: 2; 
     touch-action: pan-y; 
   }
+  
+  .textLayer .part-hit-inner {
+    background: rgba(255, 235, 59, 0.6) !important;
+    border-radius: 2px; cursor: pointer !important; pointer-events: auto !important;
+    color: transparent !important; 
+    display: inline-block !important;
+    width: fit-content !important;
+    height: auto !important;
+    padding: 0 !important; margin: 0 !important;
+    line-height: 1.2 !important;
+    vertical-align: bottom !important;
+  }
+
   .textLayer > span.part-hit:hover, .textLayer .part-hit-inner:hover {
     background: rgba(255, 152, 0, 0.85) !important;
   }
@@ -121,7 +149,6 @@
   .panel-view { display: none; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
   .panel-view.active { display: flex; }
 
-  /* 🎯 自訂下拉選單容器 */
   .list-page-controls {
     display: flex; align-items: center; gap: 6px;
     padding: 10px 14px; background: #fbfcfd; flex: none;
@@ -137,7 +164,6 @@
   }
   .list-page-controls button.nav-btn:hover { background: #e2e8f0; }
 
-  /* 🎯 自訂下拉選單 UI */
   .custom-select-wrapper {
     flex: 1; position: relative; user-select: none; min-width: 0;
   }
@@ -151,12 +177,11 @@
     content: '▼'; font-size: 10px; margin-left: 8px; color: var(--muted);
   }
   
-  /* 🎯 使用 Fixed 確保選單永遠顯示在正確位置 */
   .custom-options {
     display: none; position: fixed; 
     background: #fff; border: 1px solid #b0c4d8; border-radius: 6px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 99999;
-    max-height: 160px; /* 約顯示 5 個選項的高度 */
+    max-height: 160px;
     overflow-y: auto; -webkit-overflow-scrolling: touch;
   }
   .custom-options.open { display: block; }
@@ -284,7 +309,6 @@
 
 <div class="layout">
   <div class="left-pane">
-    <!-- 🎯 頂部工具列：搜尋、縮放、上傳、解鎖 -->
     <div class="epc-toolbar">
       <div class="search-group">
         <input type="search" id="partSearch" placeholder="搜尋零件號碼或名稱...">
@@ -299,21 +323,57 @@
         <button id="btnZoomIn" title="放大">+</button>
       </div>
 
-      <div class="upload-btn-wrapper" title="上傳 PDF">
-        <input type="file" id="fileInput" accept=".pdf,application/pdf">
-        <span class="action-btn">⬆️</span>
+      <div class="menu-wrapper">
+        <button class="menu-toggle-btn" id="btnMenuToggle" title="選單">☰</button>
+        <div class="dropdown-menu" id="dropdownMenu">
+          <!-- 🎯 識別字眼: Yamaha 上傳按鈕 (Y牌+PDF Icon) -->
+          <div class="menu-item" onclick="document.getElementById('fileInputYamaha').click()">
+            <span style="color:#e11d48; font-family:monospace; font-weight:bold;">Y</span>牌 
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle;">
+              <path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" fill="#dc2626"/>
+              <path d="M14 2V8H20" stroke="white" stroke-width="1.5"/>
+              <text x="4.5" y="17" font-family="Arial" font-size="7" font-weight="bold" fill="white">PDF</text>
+            </svg>
+          </div>
+          <!-- 🎯 識別字眼: Honda 上傳按鈕 (H牌+PDF Icon) -->
+          <div class="menu-item" onclick="document.getElementById('fileInputHonda').click()">
+            <span style="color:#0284c7; font-family:monospace; font-weight:bold;">H</span>牌 
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle;">
+              <path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" fill="#dc2626"/>
+              <path d="M14 2V8H20" stroke="white" stroke-width="1.5"/>
+              <text x="4.5" y="17" font-family="Arial" font-size="7" font-weight="bold" fill="white">PDF</text>
+            </svg>
+          </div>
+          <!-- 🎯 識別字眼: Kawasaki 上傳按鈕 (K牌+PDF Icon) -->
+          <div class="menu-item" onclick="document.getElementById('fileInputKawasaki').click()">
+            <span style="color:#16a34a; font-family:monospace; font-weight:bold;">K</span>牌 
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle;">
+              <path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" fill="#dc2626"/>
+              <path d="M14 2V8H20" stroke="white" stroke-width="1.5"/>
+              <text x="4.5" y="17" font-family="Arial" font-size="7" font-weight="bold" fill="white">PDF</text>
+            </svg>
+          </div>
+          <div class="menu-item" onclick="document.getElementById('fileInputRotate').click()">
+            <span style="color:#0284c7;">🔄</span> 強制橫放並轉正
+          </div>
+          <div class="menu-item" onclick="document.getElementById('fileInputDecrypt').click()">
+            <span>🔑</span> 解鎖 PDF
+          </div>
+        </div>
       </div>
-      <div class="upload-btn-wrapper" title="解鎖 PDF">
-        <input type="file" id="fileInputDecrypt" accept=".pdf,application/pdf">
-        <span class="action-btn">🔑</span>
-      </div>
+      
+      <input type="file" id="fileInputYamaha" accept=".pdf,application/pdf" style="display:none;">
+      <input type="file" id="fileInputHonda" accept=".pdf,application/pdf" style="display:none;">
+      <input type="file" id="fileInputKawasaki" accept=".pdf,application/pdf" style="display:none;">
+      <input type="file" id="fileInputRotate" accept=".pdf,application/pdf" style="display:none;">
+      <input type="file" id="fileInputDecrypt" accept=".pdf,application/pdf" style="display:none;">
     </div>
 
     <div class="pdf-viewport-wrapper">
       <div class="pdf-viewport" id="pdfViewport">
         <div id="emptyState">
           <p>📄</p>
-          <span>請拖曳 PDF 到此處，或點擊上方按鈕上傳</span>
+          <span>請拖曳 PDF 到此處，或點擊右上角選單上傳</span>
         </div>
         <div class="pdf-container" id="pdfContainer"></div>
       </div>
@@ -328,20 +388,14 @@
 
     <div class="sidebar-body">
       <div class="panel-view active" id="viewList">
-        <!-- 🎯 自訂下拉選單與上下頁 -->
         <div class="list-page-controls">
           <button id="btnPrevPage" class="nav-btn" title="上一頁">◀</button>
-          
           <div class="custom-select-wrapper" id="customSelectWrapper">
             <div class="custom-select-trigger" id="customSelectTrigger">⭐ 顯示所有零件</div>
-            <div class="custom-options" id="customOptions">
-              <!-- 選項將由 JS 動態生成 -->
-            </div>
+            <div class="custom-options" id="customOptions"></div>
           </div>
-
           <button id="btnNextPage" class="nav-btn" title="下一頁">▶</button>
         </div>
-        
         <div class="part-list" id="partList"></div>
       </div>
 
@@ -397,206 +451,33 @@ function getTimestamp() {
   return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-/* ================= 翻譯字典 (整合日文、印尼文、英文) ================= */
-const TRANSLATIONS = {
-  'COVER ASSY., CYLINDER HEAD': '汽缸頭蓋總成', 'GASKET, CYLINDER HEAD COVER': '汽缸頭蓋墊片',
-  'STAY, OXYGEN SENSOR': '氧感知器支架', 'BOLT, FLANGE': '法蘭螺栓', 'HEAD COMP., CYLINDER': '汽缸頭總成',
-  'GUIDE, EX. VALVE(O.S.)': '排氣門導管 (加大)', 'PLATE, CYLINDER HEAD IN.': '汽缸頭進氣側板',
-  'PLATE, CYLINDER HEAD EX.': '汽缸頭排氣側板', 'GASKET, CYLINDER HEAD': '汽缸頭墊片',
-  'PIPE, IN.': '進氣管', 'INSULATOR, THROTTLE BODY': '節氣門體絕緣墊', 'PIPE B, INLET': '進氣管 B',
-  'BAND, INSULATOR': '絕緣墊束環', 'PLUG, SPARK': '火星塞', 'BOLT, STUD': '螺柱',
-  'O-RING, IN. PIPE': '進氣管 O 型環', 'NUT, HEX.': '六角螺帽', 'DOWEL PIN': '定位銷',
-  'STAY COMP., HOSE CLAMPER': '軟管夾支架總成', 'SEAL, VALVE STEM': '汽門桿油封', 'CAMSHAFT COMP.': '凸輪軸總成',
-  'SPROCKET, CAM': '凸輪鏈輪', 'ARM COMP., IN. VALVE ROCKER': '進氣門搖臂總成',
-  'ARM COMP., EX. VALVE ROCKER': '排氣門搖臂總成', 'SHAFT, ROCKER ARM': '搖臂軸',
-  'VALVE, IN.': '進氣門', 'VALVE, EX.': '排氣門', 'SPRING, VALVE': '汽門彈簧',
-  'RETAINER, VALVE SPRING': '汽門彈簧保持器', 'SEAT, EX. VALVE SPRING': '排氣門彈簧座',
-  'COTTER, VALVE': '汽門夾片', 'SCREW, TAPPET ADJUSTING': '汽門間隙調整螺絲',
-  'NUT, TAPPET ADJUSTING': '汽門間隙調整螺帽', 'CHAIN, CAM': '凸輪鏈條',
-  'SHOE, CAM CHAIN TENSIONER': '凸輪鏈條張緊器滑靴', 'LIFTER ASSY., TENSIONER': '張緊器升降器總成',
-  'CAP, TENSIONER LIFTER': '張緊器升降器蓋', 'PIVOT, CAM CHAIN TENSIONER': '凸輪鏈條張緊器樞軸',
-  'GASKET, TENSIONER LIFTER': '張緊器升降器墊片', 'GUIDE, CAM CHAIN': '凸輪鏈條導板',
-  'CYLINDER COMP.': '汽缸總成', 'GASKET, CYLINDER': '汽缸墊片', 'STAY COMP., IGNITION COIL': '點火線圈支架總成',
-  'WASHER, SEALING': '密封墊圈', 'PUMP ASSY., WATER': '水泵總成', 'COVER, WATER PUMP': '水泵蓋',
-  'GASKET, WATER PUMP COVER': '水泵蓋墊片', 'GASKET, WATER PUMP BODY': '水泵體墊片',
-  'THERMOSTAT ASSY.': '節溫器總成', 'SENSOR ASSY., WATER TEMPERATURE': '水溫感知器總成',
-  'FLYWHEEL COMP.': '飛輪總成', 'STATOR COMP.': '定子總成', 'ROTOR SET, OIL PUMP': '機油泵轉子組',
-  'PUMP ASSY., OIL': '機油泵總成', 'GEAR, OIL PUMP DRIVEN': '機油泵從動齒輪', 'BOLT, SPECIAL': '特殊螺栓',
-  'SCREW, TAPPING': '自攻螺絲', 'COVER, L. SIDE': '左側蓋', 'GASKET, L. COVER': '左蓋墊片',
-  'COLLAR': '襯套/軸環', 'DUCT COMP., L. COVER': '左蓋導管總成', 'SEAL, L. COVER': '左蓋油封',
-  'BOLT, SOCKET': '內六角螺栓', 'CIRCLIP, INTERNAL': '內卡環', 'BEARING COMP.': '軸承總成',
-  'CAP COMP., RADIATOR': '散熱器蓋總成', 'RADIATOR ASSY.': '散熱器總成', 'BASE COMP., RADIATOR': '散熱器底座總成',
-  'SEAL, DRAIN': '放水塞油封', 'COVER COMP., RADIATOR': '散熱器蓋總成', 'HOSE A, WATER': '水管 A',
-  'HOSE B, WATER': '水管 B', 'FAN COMP., COOLING': '散熱風扇總成', 'NUT, FENDER SETTING': '擋泥板固定螺帽',
-  'BOLT, DRAIN': '放油塞', 'CLAMP, HOSE': '軟管夾', 'CLAMP, WATER HOSE': '水管夾',
-  'PIECE SET, SLIDE': '滑動件組', 'FACE, DRIVE': '驅動盤面', 'BOSS, DRIVE FACE': '驅動盤軸套',
-  'FACE COMP., MOVABLE DRIVE': '移動驅動盤面總成', 'ROLLER SET, WEIGHT': '配重滾輪組',
-  'PLATE, RAMP': '斜坡板', 'OIL SEAL': '油封', 'OUTER COMP., CLUTCH': '離合器外套總成',
-  'PLATE COMP., DRIVE': '驅動板總成', 'PLATE, CLUTCH SIDE': '離合器側板', 'SPRING, CLUTCH': '離合器彈簧',
-  'WEIGHT SET, CLUTCH': '離合器配重組', 'RUBBER, CLUTCH DAMPER': '離合器減震橡膠', 'BELT, DRIVE': '驅動皮帶',
-  'FACE SET, DRIVEN': '從動盤面組', 'FACE SET, MOVABLE DRIVEN': '移動從動盤面組', 'PIN, ROLLER GUIDE': '滾輪導銷',
-  'ROLLER GUIDE': '滾輪導件', 'SPRING, DRIVEN FACE': '從動彈面彈簧', 'COLLAR, SEAL': '油封套',
-  'COLLAR, SPRING': '彈簧套', 'NUT, SPECIAL': '特殊螺帽', 'CIRCLIP': 'C型環',
-  'BEARING, RADIAL BALL': '徑向滾珠軸承', 'BEARING, NEEDLE': '滾針軸承', 'SEAL, DRIVEN FACE': '從動盤油封',
-  'TUBE, MISSION BREATHER': '變速箱通氣管', 'CASE COMP., MISSION': '變速箱外殼總成',
-  'GASKET, MISSION CASE': '變速箱外殼墊片', 'DRIVESHAFT': '驅動軸', 'COUNTERSHAFT': '副軸',
-  'GEAR, COUNTER': '副軸齒輪', 'GEAR COMP., FINAL': '最終齒輪總成', 'CLIP, TUBE': '管夾',
-  'CRANKCASE COMP., R.': '右曲軸箱總成', 'BUSH, ENGINE HANGER RUBBER': '引擎吊架橡膠襯套',
-  'BUSH, MAIN STAND': '主支架襯套', 'PLATE COMP., RIGIDITY UPPER': '上加強板總成',
-  'PLATE COMP., RIGIDITY LOWER': '下加強板總成', 'BASE, STATOR': '定子底座', 'GASKET, STATOR BASE': '定子底座墊片',
-  'GAUGE, OIL LEVEL': '機油尺', 'CLAMPER, A.C. GENERATOR CORD': '發電機線夾', 'BOLT A, STUD': '螺柱 A',
-  'BOLT B, STUD': '螺柱 B', 'OIL SEAL, 20.8X32X6': '油封 20.8X32X6', 'O-RING': 'O型環',
-  'BOLT, DRAIN PLUG': '放油塞螺栓', 'BEARING, FINAL GEAR SHAFT': '最終齒輪軸軸承',
-  'OIL SEAL, CRANKSHAFT': '曲軸油封', 'OIL SEAL, DRIVESHAFT': '驅動軸油封', 'CRANKSHAFT COMP.': '曲軸總成',
-  'RING SET, PISTON': '活塞環組', 'PISTON': '活塞', 'PIN, PISTON': '活塞銷', 'CLIP, PISTON PIN': '活塞銷夾',
-  'KEY, WOODRUFF': '半月鍵', 'SENSOR SET': '感知器組', 'O-RING, THROTTLE BODY': '節氣門體O型環',
-  'STAY, WIRE': '電線支架', 'COVER COMP., THROTTLE BODY': '節氣門體蓋總成', 'THROTTLE BODY ASSY.': '節氣門體總成',
-  'BODY SET': '本體組', 'VALVE SET, IDLE AIR CONTROL': '怠速空氣控制閥組', 'INJECTOR ASSY., FUEL': '燃油噴射器總成',
-  'RING, SEAL': '密封環', 'CLAMPER, BREATHER TUBE': '通氣管夾', 'JOINT COMP., INJECTOR': '噴射器接頭總成',
-  'COLLAR, THROTTLE BODY COVER': '節氣門體蓋襯套', 'SCREW, PAN': '盤頭螺絲', 'SCREW-WASHER': '帶墊螺絲',
-  'LIGHT ASSY., FR. COMBINATION': '前組合燈總成', 'METER ASSY., COMBINATION': '組合儀表總成',
-  'METER COMP., LCD': 'LCD儀表', 'CASE ASSY., UPPER': '上殼總成', 'CASE ASSY., UNDER': '下殼總成',
-  'CAP, LOCK NUT': '鎖緊螺帽蓋', 'MIRROR COMP.': '後視鏡總成', 'BOLT, ADAPTER': '轉接螺栓',
-  'CABLE, THROTTLE': '節氣門線纜', 'CLAMPER, THROTTLE CABLE': '節氣門線纜夾', 'CABLE COMP. A, THROTTLE': '節氣門線纜總成 A',
-  'CABLE COMP. B, THROTTLE': '節氣門線纜總成 B', 'SWITCH ASSY., STARTER & HAZARD & IDLE STOP': '啟動/警示/怠速熄火開關總成',
-  'SWITCH ASSY., DIMMER & HORN & WINKER': '遠近光/喇叭/方向燈開關總成', 'GRIP COMP., THROTTLE': '節氣門握把總成',
-  'GRIP, L. HANDLE': '左把手握把', 'CLAMP, HARNESS': '線束夾', 'SWITCH ASSY., FR. STOP': '前煞車開關總成',
-  'HOSE COMP. A, FR. BRAKE': '前煞車油管總成 A', 'HOSE COMP. B, FR. BRAKE': '前煞車油管總成 B',
-  'CLAMPER A, FR. BRAKE HOSE': '前煞車油管夾 A', 'CLAMPER B, FR. BRAKE HOSE': '前煞車油管夾 B',
-  'CLAMPER C, FR. BRAKE HOSE': '前煞車油管夾 C', 'BOOT COMP.': '防塵套總成',
-  'CYLINDER SUB ASSY., FR. BRAKE MASTER': '前煞車總泵汽缸副總成', 'PROTECTOR': '保護蓋',
-  'CAP, MASTER CYLINDER': '總泵蓋', 'HOLDER, MASTER CYLINDER': '總泵固定座', 'DIAPHRAGM': '膜片',
-  'PLATE, DIAPHRAGM': '膜片固定板', 'CYLINDER SET, MASTER': '總泵汽缸組', 'LEVER, R. STEERING HANDLE': '右方向把拉桿',
-  'BOLT, FLANGE SOCKET': '法蘭內六角螺栓', 'BOLT, HANDLE LEVER PIVOT': '把手拉桿樞軸螺栓', 'BOLT, OIL': '油管螺栓',
-  'WASHER, OIL BOLT': '油管螺栓墊圈', 'SCREW, FLAT': '平頭螺絲', 'NUT, FLANGE': '法蘭螺帽',
-  'SWITCH ASSY., L. HANDLE STOP': '左把手煞車開關總成', 'COVER, STOP SWITCH': '煞車開關蓋',
-  'HOSE COMP. A, RR. BRAKE': '後煞車油管總成 A', 'CYLINDER SUB ASSY., RR. MASTER': '後煞車總泵汽缸副總成',
-  'LEVER, L. HANDLE': '左把手拉桿', 'PIPE, RR. BRAKE': '後煞車油管', 'HOSE B, RR. BRAKE': '後煞車油管 B',
-  'HOSE A, FRONT BRAKE SUB': '前煞車副油管 A', 'VALVE, DELAY': '延遲閥', 'CLAMPER A, RR. BRAKE HOSE': '後煞車油管夾 A',
-  'CLAMPER B, RR. BRAKE HOSE': '後煞車油管夾 B', 'CLAMPER C, RR. BRAKE HOSE': '後煞車油管夾 C',
-  'PIPE COMP., RR. BRAKE': '後煞車管總成', 'HOSE COMP. B, RR. BRAKE': '後煞車油管總成 B', 'HOSE COMP., BRAKE SUB': '煞車副油管總成',
-  'VALVE ASSY., DELAY': '延遲閥總成', 'STAY, ABS MODULATOR': 'ABS調節器支架', 'MODULATOR ASSY.': 'ABS調節器總成',
-  'CLAMP, BRAKE PIPE': '煞車管夾', 'PIPE, STEERING HANDLE': '轉向把手管', 'WEIGHT A, HANDLE': '把手配重 A',
-  'POST COMP., HANDLE': '把手立柱總成', 'HOLDER, HANDLE UNDER': '把手下固定座', 'HOLDER, HANDLE UPPER': '把手上固定座',
-  'COVER, HANDLE RR.': '後把手蓋', 'COVER COMP., HANDLE RR.': '後把手蓋總成', 'EMBLEM, PRODUCT': '產品徽章',
-  'NUT, U': 'U型螺帽', 'COLLAR A, HANDLE SETTING': '把手固定襯套 A', 'WASHER': '墊圈',
-  'COLLAR B, HANDLE SETTING': '把手固定襯套 B', 'CAP, SOCKET BOLT': '內六角螺栓蓋', 'RACE, STEERING TOP BALL': '轉向上鋼珠座',
-  'RACE, STEERING BOTTOM BALL': '轉向下鋼珠座', 'NUT, STEERING STEM LOCK': '轉向主軸鎖緊螺帽',
-  'BALL ASSY., STEERING': '轉向鋼珠總成', 'BALL ASSY., STEERING STEEL': '轉向鋼珠總成 (鋼)',
-  'RACE, STEERING TOP CONE': '轉向上鋼珠錐座', 'RACE, STEERING BOTTOM CONE': '轉向下鋼珠錐座',
-  'DUST SEAL, STEERING HEAD': '轉向頭防塵封', 'WASHER, STEERING HEAD DUST': '轉向頭防塵墊圈',
-  'THREAD COMP., STEERING HEAD': '轉向頭螺紋總成', 'FENDER SET, FR.': '前擋泥板組', 'COLLAR, FR. FENDER': '前擋泥板襯套',
-  'RUBBER, RR. FENDER CUSHION': '後擋泥板緩衝橡膠', 'COLLAR, TAILLIGHT MOUNTING': '尾燈固定襯套',
-  'BOOT, HEADLIGHT BRACKET': '頭燈支架防塵套', 'BRACKET COMP., FR. NUMBER PLATE': '前牌支架總成',
-  'GUARD, NUMBER PLATE': '車牌護板', 'WINDSCREEN SET': '風鏡組', 'COVER, FR. UPPER': '前上蓋',
-  'COVER, FR. RIGHT': '右前蓋', 'COVER, FR. LEFT': '左前蓋', 'COVER, FR. CENTER': '前中央蓋',
-  'COVER, FR. LOWER': '前下蓋', 'ADJUSTER, WINDSCREEN': '風鏡調整器', 'STAY, WINDSCREEN': '風鏡支架',
-  'HOLDER, WINDSCREEN': '風鏡固定座', 'SWITCH, MULTI': '多功能開關', 'COVER, MULTI SWITCH': '多功能開關蓋',
-  'COVER SET, R. FR. SIDE': '右前側蓋組', 'COVER SET, L. FR. SIDE': '左前側蓋組', 'LINK ASSY., SCREEN ADJUST': '風鏡調整連桿總成',
-  'RIVET, PUSH': '按壓式鉚釘', 'NUT, WELL': '沉頭螺帽', 'NUT, CLIP': '夾片螺帽', 'WASHER, THRUST': '止推墊圈',
-  'WASHER, NYLON': '尼龍墊圈', 'CLIP, SNAP FITTING': '卡扣', 'BRACKET, ADJUST SCREEN': '風鏡調整支架',
-  'HOLDER, SCREEN': '風鏡固定座', 'LINK, ARM': '臂連桿', 'KNOB, ADJUST LOCK': '鎖定調整鈕',
-  'SHAFT A, PIVOT': '樞軸 A', 'SHAFT B, PIVOT': '樞軸 B', 'CLIP': '夾子', 'SPRING, ADJUST PIVOT': '調整樞軸彈簧',
-  'STOPPER, ADJUST KNOB': '調整鈕擋塊', 'SPRING, ASSIST': '輔助彈簧', 'LID, R. SCREEN HOLDER': '右風鏡固定座蓋',
-  'LID, L. SCREEN HOLDER': '左風鏡固定座蓋', 'SWITCH ASSY., MULTI': '多功能開關總成', 'COVER SET, L. BODY': '左車身蓋組',
-  'COVER SET, L. BODY SIDE': '左車身側蓋組', 'COVER SET, RR. CENTER': '後中央蓋組', 'BOX, LUGGAGE': '置物箱',
-  'GUARD, RR. SPLASH': '後防濺護板', 'COVER, BATTERY': '電瓶蓋', 'BOLT, FR. FENDER FIXING': '前擋泥板固定螺栓',
-  'PAD SET, FR.': '前煞車皮組', 'SCREW, BLEEDER': '放氣螺絲', 'CAP, BLEEDER': '放氣螺絲蓋', 'PISTON A': '活塞 A',
-  'SPRING, PAD': '煞車皮彈簧', 'RING, STOPPER': '擋環', 'BOLT, PIN': '銷螺栓', 'BOOT, PIN BUSH': '銷襯套防塵套', 'BOOT B': '防塵套 B',
-  'CALIPER SUB ASSY., L. FR.': '左前煞車卡鉗副總成', 'BRACKET SUB ASSY., L. FR.': '左前支架副總成', 'PISTON B': '活塞 B',
-  'PIN, HANGER': '懸掛銷', 'WASHER, WAVE': '波形墊圈', 'BOLT, TORX': '星型螺栓', 'SENSOR, FR. WHEEL SPEED': '前輪速感知器',
-  'VALVE, RIM': '輪圈氣門嘴', 'AXLE, FR. WHEEL': '前輪軸', 'COLLAR, FR. WHEEL SIDE': '前輪側襯套', 'RING, FR. PULSER': '前脈衝環',
-  'COLLAR, FR. AXLE DISTANCE': '前軸距襯套', 'WHEEL SUB ASSY., FR.': '前輪副總成', 'TIRE, FR.': '前輪胎', 'DISK, FR. BRAKE': '前煞車碟盤',
-  'DUST SEAL': '防塵封', 'PAD SET, RR. BRAKE': '後煞車皮組', 'SEAL SET, PISTON': '活塞油封組', 'BRACKET COMP., RR.': '後支架總成',
-  'CALIPER SUB ASSY., RR.': '後煞車卡鉗副總成', 'COVER, DUST': '防塵蓋', 'PIN B': '銷 B', 'CUSHION ASSY., R. RR.': '右後避震總成',
-  'COLLAR, RUBBER BUSH': '橡膠襯套', 'BUSH, UPPER RUBBER': '上橡膠襯套', 'MARK, SHOWA': 'SHOWA 標誌',
-  'CUSHION ASSY., L. RR.': '左後避震總成', 'WINKER ASSY., R. FR.': '右前方向燈總成', 'RUBBER, R. WINKER MOUNTING': '右方向燈固定橡膠',
-  'COLLAR, WINKER': '方向燈襯套', 'WINKER ASSY., L. FR.': '左前方向燈總成', 'RUBBER, L. WINKER MOUNTING': '左方向燈固定橡膠',
-  'WINKER ASSY., R. RR.': '右後方向燈總成', 'WINKER ASSY., L. RR.': '左後方向燈總成', 'TAILLIGHT UNIT': '尾燈單元',
-  'LIGHT ASSY, LICENSE': '牌照燈總成', 'CLIP, COUPLER': '接頭夾', 'STAY, REAR FENDER': '後擋泥板支架',
-  'FENDER A, REAR': '後擋泥板 A', 'COVER, TAILLIGHT :UNDER': '尾燈下蓋', 'FENDER C, REAR': '後擋泥板 C',
-  'FENDER, REAR :UPPER': '後擋泥板上部', 'FENDER, REAR :LOWER': '後擋泥板下部', 'REFLECTOR, REFLEX': '反光片',
-  'BRACKET, RR. FENDER': '後擋泥板支架', 'COVER, RR. CENTER LOWER': '後中央下蓋', 'BATTERY': '電瓶',
-  'COLLAR, RR. FENDER': '後擋泥板襯套', 'BOX, BATTERY': '電瓶盒', 'TUBE, BATTERY DRAIN': '電瓶排液管',
-  'BODY COMP., FRAME': '車架總成', 'STAY, R. FR. COVER': '右前蓋支架', 'STAY, L. FR. COVER': '左前蓋支架',
-  'GUIDE, BRAKE HOSE': '煞車油管導件', 'NUT, FR. COVER STAY': '前蓋支架螺帽', 'COLLAR COMP., FR.': '前部襯套總成',
-  'STAY B, BRAKE HOSE JOINT': '煞車油管接頭支架 B', 'STAY, DELAY VALVE': '延遲閥支架', 'LINK ASSY., ENGINE HANGER': '引擎吊架連桿總成',
-  'RUBBER, STOPPER': '緩衝橡膠', 'STAY COMP., ECU': 'ECU支架總成', 'RUBBER, HEADLIGHT CASE MOUNTING': '頭燈殼固定橡膠',
-  'GROMMET, SEAT LOCK CABLE': '座墊鎖拉線護圈', 'GROMMET, SIDE COVER': '側蓋護圈', 'CAP, RESERVE TANK': '副水箱蓋',
-  'TANK, RESERVE': '副水箱', 'TUBE, RESERVE TANK': '副水箱水管', 'DRIVER, GRIP': '起子，握把', 'SPANNER': '扳手',
-  'WRENCH, BOX': '套筒扳手', 'BAG, TOOL': '工具袋', 'LABEL, COOLANT INFORMATION': '冷卻液信息標籤',
-  'LABEL, TIRE & DRIVE & CARGO': '輪胎/傳動/載重標籤', 'LABEL, AIR CLEANER ELEMENT': '空氣濾清器濾芯標籤',
-  'LABEL, ABS INFORMATION': 'ABS信息標籤', 'LABEL, FUEL & DRIVE': '燃油/傳動標籤', 'MARK, HONDA': 'HONDA 標誌',
-  'MARK, ENGINE': '引擎標誌', 'MARK, ABS': 'ABS 標誌', 'MARK(COMBI BRAKE)': '聯動煞車標誌', 'MARK(HSTC)': 'HSTC 標誌',
-  'EMBLEM(ADV160)': 'ADV160 徽章', 'TUBE, DRAIN': '排放管', 'COVER ASSY, ENGINE TOP': '引擎上蓋總成',
-  'SEAL, ENGINE TOP COVER': '引擎上蓋油封', 'JET COMP, PISTON': '活塞噴油嘴總成', 'COVER, OIL FILTER': '機油濾清器蓋',
-  'SCREEN, OIL FILTER': '機油濾清器網', 'SPRING, OIL FILTER SCREEN': '機油濾清器網彈簧', 'PROTECTOR, SPEED SENSOR': '速度感知器保護蓋',
-  'SENSOR ASSY, SPEED': '速度感知器總成', 'OIL SEAL, 26X45X6': '油封 26X45X6', 'OIL SEAL, 28X32X6': '油封 28X32X6',
-  'OIL SEAL, 20X32X6': '油封 20X32X6', 'WASHER, DRAIN PLUG': '放油塞墊圈', 'SENSOR, THROTTLE': '節氣門感知器',
-  'BODY ASSY., THROTTLE': '節氣門體總成', 'BODY, THROTTLE': '節氣門體', 'VALVE, IDLE AIR CONTROL': '怠速空氣控制閥', 'INJECTOR, FUEL': '燃油噴射器',
-  'カバー 左サイド': '左側蓋', 'ガスケット 左カバー': '左蓋墊片', '左サイド': '左側', '左カバー': '左蓋',
-  'カバー': '蓋', 'サイド': '側', 'ガスケット': '墊片', 'ニチアス': 'Nichias', '大同': '大同', 'ダイト': '大同', 'ダイト-': '大同', 'ダ イト': '大同',
-  'ワッシャー': '墊圈', 'スラスト': '止推', 'スナップフィッティング': '快插接頭', 'フィッティング': '接頭',
-  'カムチェンテンショナー': '凸輪鏈條張緊器', 'カムチェン': '凸輪鏈條', 'シュー': '滑靴', 'カム': '凸輪', 'チェン': '鏈條', 'チェーン': '鏈條',
-  'スプロケット': '鏈輪', 'テンショナー': '張緊器', 'シリンダーヘッド': '汽缸頭', 'シリンダー': '汽缸', 'ピストン': '活塞', 'ピストンリング': '活塞環',
-  'クランクシャフト': '曲軸', 'クランクケース': '曲軸箱', 'スロットルボディ': '節氣門體', 'フューエルインジェクター': '燃油噴射器',
-  'インジェクター': '噴油嘴', 'スロットル': '節氣門', 'ブレーキ': '煞車', 'マスターシリンダー': '總泵', 'キャリパー': '卡鉗', 'ディスク': '碟盤',
-  'パッド': '煞車皮', 'ホイール': '車輪', 'タイヤ': '輪胎', 'リム': '輪框', 'スイングアーム': '搖臂', 'クッション': '避震器', 'ショック': '避震',
-  'コンビネーションライト': '尾燈', 'ライト': '燈', 'ランプ': '燈', 'ウィンカー': '方向燈', 'フェンダー': '擋泥板', 'ハーネス': '線束',
-  'フォブキー': '智能鑰匙', 'ボディ': '車身', 'リザーブタンク': '副水箱', 'エンブレム': '徽章', 'エアークリーナー': '空氣濾清器',
-  'キャニスター': '碳罐', 'マフラー': '排氣管', 'エキゾースト': '排氣', 'サイレンサー': '消音器', 'スタンド': '支架', 'ウォーターポンプ': '水泵',
-  'オイルポンプ': '機油泵', 'ラジエター': '散熱器', 'ファン': '風扇', 'サーモスタット': '節溫器', 'オイルフィルター': '機油濾清器',
-  'フィルター': '濾清器', 'エレメント': '濾芯', 'ドライブフェイス': '驅動盤', 'ドリブンフェイス': '從動盤', 'フェイス': '盤面', 'クラッチ': '離合器',
-  'ベルト': '皮帶', 'ローラ': '滾輪', 'ウエイト': '配重', 'スターター': '啟動馬達', 'ジェネレーター': '發電機', 'マグネトー': '磁電機',
-  'コイル': '線圈', 'プラグ': '火星塞', 'イグニッション': '點火', 'トランスミッション': '變速箱', 'ミッション': '變速箱', 'シャフト': '軸',
-  'ギア': '齒輪', 'ベアリング': '軸承', 'シール': '油封', 'オイルシール': '油封', 'Oリング': 'O型環', 'サークリップ': 'C型環',
-  'クリップ': '夾子', 'クランプ': '夾具', 'バンド': '束帶', 'ホース': '軟管', 'パイプ': '管', 'チューブ': '管', 'タンク': '油箱', 'ポンプ': '泵',
-  'ケース': '外殼', 'ハウジング': '外殼', 'カラー': '襯套', 'ブッシュ': '襯套', 'ラバー': '橡膠', 'ゴム': '橡膠', 'ダンパー': '減震器',
-  'スプリング': '彈簧', 'ボルト': '螺栓', 'ナット': '螺帽', 'スクリュー': '螺絲', 'ピン': '銷', 'リング': '環', 'ステー': '支架', 'ブラケット': '支架',
-  'アーム': '臂', 'ロッド': '桿', 'ケーブル': '線纜', 'ワイヤー': '線', 'スイッチ': '開關', 'センサー': '感知器', 'リレー': '繼電器',
-  'ヒューズ': '保險絲', 'バッテリー': '電瓶', 'レンズ': '透鏡', 'ミラー': '後視鏡', 'メーター': '儀表', 'ハンドル': '把手', 'グリップ': '握把',
-  'レバー': '拉桿', 'ペダル': '踏板', 'ステップ': '踏板', 'シート': '座墊', 'フレーム': '車架', 'フォーク': '前叉', 'インテーク': '進氣',
-  'バルブ': '氣門', 'ロッカー': '搖臂', 'ヘッド': '頭', 'カウル': '整流罩', 'スクリーン': '風鏡', 'フロント': '前', 'リア': '後', 'リヤ': '後',
-  'メイン': '主', 'サブ': '副', 'アウター': '外', 'インナー': '內', 'アッパー': '上', 'ロアー': '下', 'センター': '中', 'COMP.': '總成',
-  'ASSY.': '總成', 'STD.': '標準', 'O.S.': '加大', '左': '左', '右': '右', 'マーク': '標誌', 'ラベル': '標籤', 'ツール': '工具',
-  'リベット': '鉚釘', 'パッキン': '密封墊', 'グロメット': '護圈', 'ダクト': '導管', 'プレート': '板', 'リンク': '連桿', 'ボス': '軸套',
-  'ピボット': '樞軸', 'ガイド': '導軌', 'アジャスター': '調整器', 'アジャスティング': '調整', 'リテーナー': '保持器', 'コッター': '夾片',
-  'ステム': '桿', 'キー': '鑰匙', 'ロック': '鎖', 'オープナー': '開啟器', 'キャップ': '蓋', 'キャッチ': '扣', 'ヒンジ': '鉸鏈', 'スラスト': '止推'
-};
+/* ================= 下拉選單邏輯 ================= */
+$('btnMenuToggle').addEventListener('click', (e) => {
+  e.stopPropagation();
+  $('dropdownMenu').classList.toggle('open');
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.menu-wrapper')) {
+    $('dropdownMenu').classList.remove('open');
+  }
+});
+
+/* ================= 翻譯字典 ================= */
+// [TRANSLATION_DICTIONARY_INSERT_HERE]
+const TRANSLATIONS = {}; 
 
 function translateText(text) {
-  // 1. 使用 NFKC 正規化，自動解決半角/全角、以及拆字問題
-  let result = text.normalize('NFKC');
-  // 2. 去除不可見字符
-  result = result.replace(/[\u200B-\u200D\uFEFF]/g, '');
-
-  const keys = Object.keys(TRANSLATIONS).sort((a, b) => b.length - a.length);
-  for (const jp of keys) {
-    let normJp = jp.normalize('NFKC');
-    let pattern = '';
-    for (let i = 0; i < normJp.length; i++) {
-      let char = normJp[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // 允許長音符號 (ー) 和連字號 (-) 互相匹配
-      if (char === 'ー' || char === '-') {
-        char = '[ー\\-－–—]';
-      }
-      pattern += char;
-      if (i < normJp.length - 1) pattern += '\\s*'; 
-    }
-    const regex = new RegExp(pattern, 'gi');
-    result = result.replace(regex, TRANSLATIONS[jp]);
-  }
-  
-  // 清理中文字之間的空白
-  result = result.replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, '$1$2');
-  // 清理多餘的標點與連續空白
-  result = result.replace(/[,、]+/g, ' ').replace(/\s+/g, ' ').trim();
-  return result;
+  // [TRANSLATION_LOGIC_INSERT_HERE]
+  return text; 
 }
 
 /* ================= 資料層 ================= */
-// 🎯 恢復寬容的正則匹配，確保 5-3-3 或 4-3-4 等格式都能抓取
-const PART_REGEX = /\b[A-Z0-9]{3,7}\s*[-－–—]\s*[A-Z0-9]{2,6}(?:\s*[-－–—]\s*[A-Z0-9]{2,8}){0,2}\b/gi;
+const HONDA_PART_REGEX = /\b[A-Z0-9]{3,7}\s*[-－–—]\s*[A-Z0-9]{2,6}(?:\s*[-－–—]\s*[A-Z0-9]{2,8}){0,2}\b/gi;
+// 🎯 修正 Kawasaki 正則，允許中間有空白
+const KAWASAKI_PART_REGEX = /\b\d{5}\s*-\s*[A-Z0-9]{3,5}(?:\s*-\s*[A-Z0-9]{2,4})?\b|\b\d{5}[A-Z]{1,2}\b|\b\d{3}[A-Z]{2}\d{4}\b/gi;
+// 🎯 專屬 Yamaha 正則：加入 \b 嚴格邊界，避免吞掉後面的中文字
+const YAMAHA_PART_REGEX = /\b[0-9A-Z]{3,5}\s*-\s*[0-9A-Z]{2,5}(?:\s*-\s*[0-9A-Z]{1,3}){0,2}\b/gi;
+
 const partInfoMap = new Map();          
 const pagePartKeys = new Map();         
 const pageTitles = new Map();           
@@ -605,16 +486,22 @@ let selectedKey = null;
 let currentPageIndex = 0;
 let isScrollingProgrammatically = false;
 let currentSelectValue = 'all';
+let currentMode = 'yamaha'; // 預設模式
 
 const normalizePartNo = s => String(s).replace(/[－–—]/g, '-').replace(/\s+/g, '').toUpperCase();
 function normalizeText(t) {
   return t.replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
           .replace(/[－–—]/g, '-').replace(/\s+/g, '').toUpperCase();
 }
-function parsePartNo(rawStr) {
+function parsePartNo(rawStr, mode = 'yamaha') {
   let cleanStr = normalizeText(rawStr);
-  // 🎯 恢復了字首截斷邏輯，處理如 181250-K1Z-J10 這種情況
+  
+  if (mode === 'kawasaki') {
+    return { partNo: cleanStr, itemNo: '' };
+  }
+
   if (!cleanStr.includes('-')) return { partNo: cleanStr, itemNo: '' };
+
   let parts = cleanStr.split('-'), itemNo = '';
   if (parts.length >= 2) {
     let first = parts[0];
@@ -627,7 +514,6 @@ function parsePartNo(rawStr) {
 }
 
 /* ================= 縮放與原生滑動 ================= */
-// 🎯 關鍵修正：為了避免手機載入超大檔案時記憶體溢出，動態降低手機端的渲染倍率
 const RENDER_SCALE = (window.innerWidth <= 1024) ? 1.2 : 2;
 let scale = 1;
 const viewport = $('pdfViewport');
@@ -728,7 +614,8 @@ function syncCurrentPage(immediate = false) {
     currentSelectValue = String(bestPageIndex);
     updateCustomSelectUI(bestPageIndex);
     currentPageIndex = bestPageIndex;
-    renderPartList('page', bestPageIndex);
+    // 🎯 傳入 true 以便切換頁面時重置滾動條
+    renderPartList('page', bestPageIndex, true);
   }
 }
 
@@ -741,8 +628,8 @@ viewport.addEventListener('scroll', () => {
 viewport.addEventListener('touchstart', () => { isScrollingProgrammatically = false; }, { passive: true });
 viewport.addEventListener('mousedown', () => { isScrollingProgrammatically = false; });
 
-/* ================= 檔案處理 ================= */
-function handleFiles(files) {
+/* ================= 檔案處理與旋轉修正 ================= */
+function handleFiles(files, mode = 'yamaha') {
   let newPdfFile = null;
   for (const f of files) { if (/\.pdf$/i.test(f.name)) { newPdfFile = f; break; } }
   if (!newPdfFile) { alert('請提供 PDF 格式的檔案。'); return; }
@@ -753,9 +640,52 @@ function handleFiles(files) {
     renderPartList('page', 0); renderPickList();
     scale = 1; applyZoom(1); viewport.scrollTop = 0;
   }
-  loadPdf(newPdfFile);
+  currentMode = mode;
+  loadPdf(newPdfFile, mode);
 }
-$('fileInput').addEventListener('change', e => { if (e.target.files.length) { handleFiles(e.target.files); e.target.value = ''; } });
+
+$('fileInputYamaha').addEventListener('change', e => { if (e.target.files.length) { handleFiles(e.target.files, 'yamaha'); e.target.value = ''; } });
+$('fileInputHonda').addEventListener('change', e => { if (e.target.files.length) { handleFiles(e.target.files, 'honda'); e.target.value = ''; } });
+$('fileInputKawasaki').addEventListener('change', e => { if (e.target.files.length) { handleFiles(e.target.files, 'kawasaki'); e.target.value = ''; } });
+
+$('fileInputRotate').addEventListener('change', async (e) => {
+  if (!e.target.files.length) return;
+  const file = e.target.files[0]; e.target.value = '';
+  if (!/\.pdf$/i.test(file.name)) { alert('請提供 PDF 格式的檔案。'); return; }
+  if (typeof PDFLib === 'undefined') { alert('PDF 修改套件未載入，請確認網路連線。'); return; }
+  
+  const loadingEl = $('loading');
+  loadingEl.innerHTML = '正在修改頁面屬性...<br><span style="font-size:13px;font-weight:normal;color:#64748b;">強制全部頁面橫放並轉正</span>';
+  loadingEl.classList.add('show');
+  
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+    const pages = pdfDoc.getPages();
+    
+    pages.forEach(page => {
+      page.setRotation(PDFLib.degrees(0));
+      const { width, height } = page.getSize();
+      if (height > width) {
+        page.setSize(height, width);
+      }
+    });
+    
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${file.name.replace(/\.pdf$/i, '')}_landscape_${getTimestamp()}.pdf`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    alert('✅ 處理完成！已保留原始畫質與文字，並將頁面轉為橫放。');
+  } catch (err) {
+    console.error(err); alert('❌ 處理失敗：\n' + err.message);
+  } finally { loadingEl.classList.remove('show'); }
+});
 
 const handleDecrypt = async (e) => {
   if (!e.target.files.length) return;
@@ -777,7 +707,7 @@ const handleDecrypt = async (e) => {
     let pdfDoc = null;
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
-      const vpR = page.getViewport({ scale: 2.0, rotation: 0 }); // 🎯 強制 rotation: 0
+      const vpR = page.getViewport({ scale: 2.0, rotation: 0 });
       const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
       canvas.width = vpR.width; canvas.height = vpR.height;
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -810,11 +740,11 @@ window.addEventListener('dragover', e => e.preventDefault());
 window.addEventListener('dragleave', e => { e.preventDefault(); dragCounter--; if (dragCounter === 0) overlay.classList.remove('active'); });
 window.addEventListener('drop', e => {
   e.preventDefault(); dragCounter = 0; overlay.classList.remove('active');
-  if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+  if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files, 'yamaha'); // 拖曳預設為 Yamaha
 });
 
 /* ================= 載入 PDF ================= */
-async function loadPdf(file) {
+async function loadPdf(file, mode = 'yamaha') {
   const loadingEl = $('loading');
   loadingEl.classList.add('show');
   emptyState.style.display = 'none';
@@ -831,7 +761,6 @@ async function loadPdf(file) {
       } else throw e;
     }
     
-    // 🎯 初始化進度條介面
     loadingEl.innerHTML = `
       <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
         <div>解析 PDF 中，請稍候…</div>
@@ -842,17 +771,15 @@ async function loadPdf(file) {
       </div>`;
       
     for (let i = 1; i <= pdf.numPages; i++) {
-      // 🎯 更新進度
       $('progressText').textContent = `進度：${i} / ${pdf.numPages}`;
       $('progressBar').style.width = `${(i / pdf.numPages) * 100}%`;
       
       const page = await pdf.getPage(i);
-      // 🎯 關鍵修正：強制 rotation: 0，這能徹底解決某些手機上文字層旋轉90度的問題
       const vpPDF = page.getViewport({ scale: RENDER_SCALE, rotation: 0 });
       const tc = await page.getTextContent();
       
       const pageIndex = i - 1;
-      const parsed = parsePageData(tc.items, pageIndex);         
+      const parsed = parsePageData(tc.items, pageIndex, mode);         
       
       pagePartKeys.set(pageIndex, parsed.keys);
       pageTitles.set(pageIndex, parsed.title);
@@ -867,7 +794,7 @@ async function loadPdf(file) {
       canvas.width = vpPDF.width; canvas.height = vpPDF.height;
       pageDiv.appendChild(canvas);
 
-      await new Promise(r => setTimeout(r, 0)); // 讓瀏覽器有時間渲染進度條
+      await new Promise(r => setTimeout(r, 0));
       await page.render({ canvasContext: ctx, viewport: vpPDF }).promise;
 
       const textLayerDiv = document.createElement('div');
@@ -875,9 +802,8 @@ async function loadPdf(file) {
       textLayerDiv.style.width = vpPDF.width + 'px'; textLayerDiv.style.height = vpPDF.height + 'px';
       pageDiv.appendChild(textLayerDiv);
       await pdfjsLib.renderTextLayer({ textContent: tc, container: textLayerDiv, viewport: vpPDF, textDivs: [] }).promise;
-      highlightPartNumbers(textLayerDiv);
+      highlightPartNumbers(textLayerDiv, mode);
 
-      // 🎯 關鍵修正：每處理完一頁，強制要求瀏覽器清理該頁的 PDF 快取
       page.cleanup();
     }
     
@@ -885,7 +811,8 @@ async function loadPdf(file) {
     
     currentSelectValue = "0";
     updateCustomSelectUI(0);
-    renderPartList('page', 0);
+    // 🎯 初始載入時也重置滾動條
+    renderPartList('page', 0, true);
     
     setTimeout(fitWidth, 100);
     
@@ -895,34 +822,49 @@ async function loadPdf(file) {
   } finally { loadingEl.classList.remove('show'); }
 }
 
-/* ================= 解析邏輯 ================= */
-function parsePageData(items, pageIndex) {
+/* ================= 解析邏輯 (完全獨立模式) ================= */
+function parsePageData(items, pageIndex, mode = 'yamaha') {
   if (!items || !items.length) return { keys: [], title: `第 ${pageIndex + 1} 頁` };
   
   const linesMap = {};
   items.forEach(item => {
     if (!item.str.trim()) return;
     const y = Math.round(item.transform[5]);
-    let k = Object.keys(linesMap).find(k => Math.abs(k - y) <= 6);
+    const yTolerance = mode === 'yamaha' ? 12 : 8; 
+    let k = Object.keys(linesMap).find(k => Math.abs(k - y) <= yTolerance);
     if (!k) { k = y; linesMap[k] = []; }
     linesMap[k].push(item);
   });
-  const sortedLines = Object.keys(linesMap).map(y => ({ y: parseInt(y, 10), items: linesMap[y] })).sort((a, b) => b.y - a.y);
+  
+  let sortedLines = Object.keys(linesMap).map(y => ({ y: parseInt(y, 10), items: linesMap[y] })).sort((a, b) => b.y - a.y);
 
   let pageCategory = '';
-  for (const line of sortedLines) {
-    line.items.sort((a, b) => a.transform[4] - b.transform[4]);
-    const t = line.items.map(i => i.str).join(' ').trim();
+  
+  // 🎯 解析標題 (兼容 Honda/Yamaha 與 Kawasaki)
+  for (let i = 0; i < sortedLines.length; i++) {
+    const lineItems = sortedLines[i].items;
+    const lineText = lineItems.map(x => x.str).join(' ').trim();
     
-    // 🎯 新增：排除表頭和無意義的數字行，避免抓到錯誤的標題
-    if (/No\.\s*Ref/i.test(t) || /^\d+(\s+\d+)*$/.test(t) || /E-\d+\s+No/i.test(t)) continue;
+    const figMatch = lineText.match(/(FIG\.\s*\d+\s*[\u4e00-\u9fa5A-Za-z0-9\s]+)/i);
+    if (figMatch && figMatch[1].length < 30) {
+       pageCategory = figMatch[1].trim();
+       break;
+    }
 
-    const match = t.match(/^([A-Z]-\d+(?:-\d+)?)\s+(.+)/i);
-    if (match) {
-      pageCategory = `${match[1]} ${match[2].substring(0, 15)}`; 
-      break;
-    } else if (/FIG\.\s*\d+/i.test(t) || /圖\s*\d+/i.test(t) || /KELOMPOK/i.test(t)) { 
-      if (t.length < 80) { pageCategory = t.replace(/\s+/g, ' '); break; } 
+    if (/This page covers/i.test(lineText)) {
+       const m = lineText.match(/This page covers:?\s*(.+)/i);
+       if (m && m[1].trim().length > 0 && !/GROUP|Ref|Part No|:/i.test(m[1])) {
+           pageCategory = m[1].trim();
+           break;
+       }
+       let nextLine = sortedLines[i+1];
+       if (nextLine) {
+           let rawTitle = nextLine.items.map(x => x.str).join(' ').replace(/\s+/g, ' ');
+           rawTitle = rawTitle.replace(/([A-Za-z])\s+(?=[a-z])/g, '$1');
+           if (rawTitle.length > 0 && !/GROUP|Ref|Part No|:/i.test(rawTitle)) { 
+               pageCategory = rawTitle; break; 
+           }
+       }
     }
   }
 
@@ -931,110 +873,225 @@ function parsePageData(items, pageIndex) {
 
   sortedLines.forEach(line => {
     line.items.sort((a, b) => a.transform[4] - b.transform[4]);
-    const lineText = line.items.map(i => i.str).join(' ').trim();
     
-    // 忽略表頭
-    if (/部品|名稱|名称|項次|DR\d+|備註|番號|Deskripsi|No\.\s*Part|No\.\s*Ref|Jumlah|Kode Parts|Nama part|No\. Part/i.test(lineText)) return;
+    // 過濾表頭
+    let rawLineText = line.items.map(i => i.str).join(' ').trim();
+    if (/Page covers|GROUP NO|This catalog|Engine-|Kawasaki|หมายเลขอะไหล่|ชื่ออะไหล่|Description|部品|名稱|名称|項次|DR\d+|備註|番號|Deskripsi|No\.\s*Part|No\.\s*Ref|Jumlah|Kode Parts|Nama part|No\. Part/i.test(rawLineText)) return;
 
-    let partNo = null, partIdx = -1, detectedItemNo = '';
-    let rawMatchStr = '';
-    
-    for (let i = 0; i < line.items.length; i++) {
-      const itemStr = line.items[i].str;
-      // 使用寬容的正則來比對
-      const m = new RegExp(PART_REGEX.source, 'i').exec(itemStr);
-      if (m) {
-        rawMatchStr = m[0];
-        partNo = parsePartNo(m[0]).partNo;
-        partIdx = i;
-        
-        // 🎯 修正 1：向左尋找獨立的項次 (適用於 Honda 排版)
-        for (let j = partIdx - 1; j >= 0; j--) {
-          const t = line.items[j].str.trim();
-          if (/^\d{1,3}$/.test(t)) {
-            detectedItemNo = t;
-            break;
+    if (mode === 'yamaha') {
+      // 智慧拼接，建立字符与X坐标的映射
+      let fullStr = '';
+      let charToX = [];
+      for (let i = 0; i < line.items.length; i++) {
+        const item = line.items[i];
+        if (i > 0) {
+          const prevRight = line.items[i-1].transform[4] + (line.items[i-1].width || (line.items[i-1].str.length * 5));
+          if (item.transform[4] - prevRight > 5) {
+            fullStr += ' ';
+            charToX.push(item.transform[4]);
           }
         }
-        // 🎯 修正 2：檢查同一字串前方是否帶有項次 (如 "1 81250-K1Z-J10")
-        if (!detectedItemNo) {
-          const prefixMatch = itemStr.substring(0, m.index).match(/(\d{1,3})\s*$/);
-          if (prefixMatch) detectedItemNo = prefixMatch[1];
+        fullStr += item.str;
+        const w = item.width || (item.str.length * 5);
+        for (let c = 0; c < item.str.length; c++) {
+          charToX.push(item.transform[4] + (c * (w / item.str.length)));
         }
-        break;
       }
-    }
-    if (!partNo) return;
-
-    if (detectedItemNo) lastItemNo = detectedItemNo;
-    else detectedItemNo = lastItemNo;
-
-    let partName = '', qty = 1, itemNo = detectedItemNo;
-    
-    const rightItems = line.items.slice(partIdx + 1);
-    const nameTokens = [];
-    
-    // 限制數量上限，只接受 1~99 的數字
-    for (let i = 0; i < rightItems.length; i++) {
-      const t = rightItems[i].str.trim();
-      if (/^\d{1,2}$/.test(t)) { 
-        qty = parseInt(t, 10);
-        break;
+      
+      let cleanStr = fullStr.replace(/[－–—]/g, '-');
+      const regex = new RegExp(YAMAHA_PART_REGEX.source, 'gi');
+      let match;
+      let matches = [];
+      while ((match = regex.exec(cleanStr)) !== null) {
+        matches.push({
+          partNo: normalizePartNo(match[0]),
+          start: match.index,
+          end: match.index + match[0].length
+        });
       }
-    }
-
-    for (let i = 0; i < rightItems.length; i++) {
-      let t = rightItems[i].str.trim();
-      if (!t) continue;
       
-      // 🎯 修正 3：遇到下一個零件號就停止抓取名稱，避免把後面的零件號串進名稱
-      if (new RegExp(PART_REGEX.source, 'i').test(t)) break;
+      if (matches.length > 0) {
+        for (let pIdx = 0; pIdx < matches.length; pIdx++) {
+          const part = matches[pIdx];
+          const partX = charToX[part.start] !== undefined ? charToX[part.start] : 0;
+          
+          // 1. 提取项次 (在 partX 左侧最近的纯数字)
+          let detectedItemNo = '';
+          for (let i = 0; i < line.items.length; i++) {
+            const item = line.items[i];
+            if (item.transform[4] >= partX - 5) break; 
+            const str = item.str.trim();
+            if (/^\d{1,3}$/.test(str)) detectedItemNo = str;
+          }
+          
+          // 🎯 應用繼承：如果沒有抓到項次，強制使用上一個項次
+          if (detectedItemNo) {
+            lastItemNo = detectedItemNo;
+          } else {
+            detectedItemNo = lastItemNo;
+          }
 
-      if (/^[\d\s,]+$/.test(t)) continue; 
-      if (/^[\-\.\s]+$/.test(t)) continue;  
-      if (/^[\(\)\[\]\{\}\s]*$/.test(t)) continue;
+          // 2. 限制提取范围 (当前零件与下一个零件之间)
+          let nextPartX = Infinity;
+          if (pIdx + 1 < matches.length) {
+            nextPartX = charToX[matches[pIdx+1].start];
+          }
+          
+          // 3. 收集区域内的 items
+          let regionItems = [];
+          for (let i = 0; i < line.items.length; i++) {
+            const item = line.items[i];
+            const itemX = item.transform[4];
+            if (itemX > partX - 5 && itemX < nextPartX - 5) {
+              const str = item.str.trim();
+              // 过滤备注和非法字符
+              if (!/用於|黑|白|灰|紅|山葉黑/.test(str) && !/^[\(\)\[\]\{\}\s\-\.]+$/.test(str)) {
+                 regionItems.push(item);
+              }
+            }
+          }
+          
+          // 4. 提取数量 (从右向左找最右侧的纯数字)
+          let qty = 1;
+          let qtyItemIdx = -1;
+          for (let i = regionItems.length - 1; i >= 0; i--) {
+            const str = regionItems[i].str.trim();
+            if (/^\d{1,3}$/.test(str)) {
+              qty = parseInt(str, 10);
+              qtyItemIdx = i;
+              break;
+            }
+          }
+          
+          // 如果没找到纯数字区块，尝试从最后一个字符串里剥离
+          if (qtyItemIdx === -1 && regionItems.length > 0) {
+            const lastItem = regionItems[regionItems.length - 1];
+            const trailingNum = lastItem.str.match(/(\d+)\s*$/);
+            if (trailingNum) {
+              qty = parseInt(trailingNum[1], 10);
+              lastItem.str = lastItem.str.replace(/(\d+)\s*$/, '').trim();
+            }
+          }
+          
+          // 5. 提取名称
+          let nameItems = [];
+          for (let i = 0; i < regionItems.length; i++) {
+            if (i === qtyItemIdx) continue;
+            const str = regionItems[i].str.trim();
+            // 🎯 過濾掉名稱中可能混入的零件號碼本身
+            if (str.length > 0 && !str.includes(part.partNo) && !part.partNo.includes(str)) {
+              nameItems.push(str);
+            }
+          }
+          let nameText = nameItems.join(' ').replace(/\s+/g, ' ').trim();
+          let lastPartName = translateText(nameText);
+          
+          // 保存到 partInfoMap（如果不存在）
+          if (!partInfoMap.has(part.partNo)) {
+            partInfoMap.set(part.partNo, { 
+              name: lastPartName || '（無名稱）', 
+              rawName: lastPartName,
+              qty: qty || 1, 
+              category: pageCategory || '未分類', 
+              itemNo: detectedItemNo 
+            });
+          }
+          
+          // 🎯 保存到 pageKeys，允許重複項，並包含完整行資料
+          pageKeys.push({
+            key: part.partNo,
+            name: lastPartName || '（無名稱）',
+            qty: qty || 1,
+            category: pageCategory || '未分類',
+            itemNo: detectedItemNo
+          });
+        }
+      }
+      return; // 处理完 Yamaha 的逻辑，直接返回
+    }
+
+    let cleanLineText = rawLineText.replace(/[－–—]/g, '-').replace(/\s*-\s*/g, '-').replace(/\s+/g, ' ');
+    let partNo = null, detectedItemNo = '', qty = 1;
+
+    if (mode === 'kawasaki') {
+      // 🎯 Kawasaki 專用解析 (強制執行)
+      const partRegex = /\b(\d{5}-[A-Z0-9]{4,5}(?:-[A-Z0-9]{2,4})?)\b/i;
+      const partMatch = cleanLineText.match(partRegex);
       
-      nameTokens.push(t);
-    }
+      if (partMatch) {
+        partNo = normalizePartNo(partMatch[0]);
+        
+        const beforePart = cleanLineText.substring(0, partMatch.index).trim();
+        const refMatch = beforePart.match(/(\d{5}[A-Z]?)$/i);
+        if (refMatch) detectedItemNo = refMatch[1];
 
-    if (nameTokens.length === 0) {
-      let cleanLine = lineText.replace(rawMatchStr, ' ').trim();
-      cleanLine = cleanLine.replace(/^[\s\.\-:：\d]+/, '');
-      cleanLine = cleanLine.replace(/\s+[\d\s,]+\s*$/, '');
-      cleanLine = cleanLine.replace(/[\-\.]{2,}/g, ' ').trim();
-      nameTokens.push(...cleanLine.split(/\s+/).filter(t => !/^\d+$/.test(t) && !/^[\(\)\[\]\{\}\s]*$/.test(t)));
-    }
+        let afterPart = cleanLineText.substring(partMatch.index + partMatch[0].length).trim();
+        
+        const qtyMatch = afterPart.match(/\b(\d{1,3})\b(?=[^\d]*$)/);
+        if (qtyMatch) {
+          qty = parseInt(qtyMatch[1], 10);
+          afterPart = afterPart.replace(/\b\d{1,3}\b(?=[^\d]*$)/, '').trim();
+        }
 
-    let nameStr = nameTokens.join(' ').replace(/,\s*/g, ', ').trim();
-    
-    // 強制清理結尾的點點與多餘空白
-    nameStr = nameStr.replace(/[.．\-\s]+$/, '').trim();
-
-    if (nameStr) {
-      partName = translateText(nameStr);
-      if (partName.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '').length > 0) {
-        lastPartName = partName;
+        const thaiIndex = afterPart.search(/[\u0E00-\u0E7F\u4e00-\u9fa5]/);
+        let nameSection = thaiIndex > 0 ? afterPart.substring(0, thaiIndex).trim() : afterPart;
+        nameSection = nameSection.replace(/^[\s,\.\-]+|[\s,\.\-]+$/g, '');
+        
+        if (nameSection) {
+          lastPartName = translateText(nameSection);
+        }
       }
     } else {
-      partName = lastPartName;
+      // 🎯 Honda 專用解析 (完全還原原始邏輯)
+      const regex = HONDA_PART_REGEX;
+      const match = cleanLineText.match(regex);
+      
+      if (match) {
+        partNo = parsePartNo(match[0], mode).partNo;
+        const partIdx = cleanLineText.indexOf(match[0]);
+
+        const beforePart = cleanLineText.substring(0, partIdx).trim();
+        const itemMatch = beforePart.match(/(\d{1,3})$/);
+        if (itemMatch) detectedItemNo = itemMatch[1];
+
+        const afterPart = cleanLineText.substring(partIdx + match[0].length).trim();
+        
+        const nums = afterPart.match(/(?:^|\s)(\d{1,3})(?:\s|$)/g);
+        if (nums && nums.length > 0) {
+            qty = parseInt(nums[nums.length - 1].trim(), 10);
+        }
+        
+        let nameTokens = afterPart.split(/\s+/).filter(t => 
+          !/^\d+$/.test(t) && 
+          !/^[\(\)\[\]\{\}\s\-\.]+$/.test(t)
+        );
+        if (nameTokens.length > 0) lastPartName = translateText(nameTokens.join(' '));
+      }
     }
 
-    if (!partName) partName = '（無名稱）';
+    if (!partNo) return;
+    if (detectedItemNo) lastItemNo = detectedItemNo;
+    else detectedItemNo = lastItemNo;
 
     const key = normalizePartNo(partNo);
     if (!partInfoMap.has(key)) {
       partInfoMap.set(key, { 
-        name: partName, 
-        rawName: nameStr, // 儲存原始名稱，供搜尋使用
-        qty, 
+        name: lastPartName || '（無名稱）', 
+        rawName: lastPartName,
+        qty: qty || 1, 
         category: pageCategory || '未分類', 
-        itemNo 
+        itemNo: detectedItemNo 
       });
     }
+    // Honda/Kawasaki 仍以字串儲存
     if (!pageKeys.includes(key)) pageKeys.push(key);
   });
   
-  const finalTitle = translateText(pageCategory) || `第 ${pageIndex + 1} 頁`;
+  // 🎯 組合標題：如果 pageCategory 存在，則為「第 X 頁，頁面標題」；否則僅為「第 X 頁」
+  let finalTitle = `第 ${pageIndex + 1} 頁`;
+  if (pageCategory) {
+    finalTitle = `第 ${pageIndex + 1} 頁，${translateText(pageCategory)}`;
+  }
   return { keys: pageKeys, title: finalTitle };   
 }
 
@@ -1056,7 +1113,7 @@ function bindPartEvent(el, key) {
   });
 }
 
-function highlightPartNumbers(layerDiv) {
+function highlightPartNumbers(layerDiv, mode = 'yamaha') {
   const spans = Array.from(layerDiv.querySelectorAll('span'));
   if (!spans.length) return;
   let fullText = '', charToSpanMap = [], lastTop = -1, lastRight = -1;
@@ -1067,18 +1124,29 @@ function highlightPartNumbers(layerDiv) {
     let normText = text.replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).replace(/[－–—]/g, '-');
     const top = parseFloat(span.style.top) || 0, left = parseFloat(span.style.left) || 0;
     const width = parseFloat(span.style.width) || (text.length * 5);
-    if (lastTop !== -1 && (Math.abs(top - lastTop) > 3 || left > lastRight + 5)) { fullText += ' '; charToSpanMap.push(-1); }
+    
+    // 🎯 放寬距離判定，避免被拆散，但限制在同一個座標區塊內
+    if (lastTop !== -1 && (Math.abs(top - lastTop) > 10 || left > lastRight + 50)) { 
+      fullText += ' '; 
+      charToSpanMap.push(-1); 
+    }
+    
     fullText += normText;
     for (let i = 0; i < normText.length; i++) charToSpanMap.push(idx);
     lastTop = top; lastRight = left + width;
   });
 
-  const regex = new RegExp(PART_REGEX.source, 'gi');
+  let regexSource = HONDA_PART_REGEX.source;
+  if (mode === 'kawasaki') regexSource = KAWASAKI_PART_REGEX.source;
+  else if (mode === 'yamaha') regexSource = YAMAHA_PART_REGEX.source;
+
+  const regex = new RegExp(regexSource, 'gi');
+  
   let match;
   while ((match = regex.exec(fullText)) !== null) {
     const rawMatched = match[0];
-    const parsed = parsePartNo(rawMatched);
-    const cleanMatched = parsed.partNo;
+    const cleanMatched = rawMatched.replace(/\s*-\s*/g, '-').replace(/\s+/g, '');
+    
     const start = match.index, end = start + rawMatched.length - 1;
     const idxSet = new Set();
     for (let i = start; i <= end; i++) {
@@ -1087,19 +1155,30 @@ function highlightPartNumbers(layerDiv) {
     if (idxSet.size > 10) { if (match[0].length === 0) regex.lastIndex++; continue; }
 
     const key = normalizePartNo(cleanMatched);
-    const info = partInfoMap.get(key) || { name: '（無名稱）', qty: 1, category: '未分類', itemNo: parsed.itemNo || '' };
+    const info = partInfoMap.get(key) || { name: '（無名稱）', qty: 1, category: '未分類', itemNo: '' };
     if (!partInfoMap.has(key)) partInfoMap.set(key, info);
 
     idxSet.forEach(idx => {
       const span = spans[idx];
       if (span.dataset.highlighted) return;
+      
+      // 如果已經有 part-hit-inner，就不重複處理
+      if (span.querySelector('.part-hit-inner')) {
+          span.dataset.highlighted = 'true';
+          return;
+      }
+
       const trimmed = span.textContent.trim();
       if (!trimmed) return;
       const normSpan = normalizeText(span.textContent);
 
       if (normSpan === cleanMatched) {
-        span.classList.add('part-hit'); span.dataset.highlighted = 'true'; span.dataset.partKey = key;
-        bindPartEvent(span, key);
+        // 🎯 強制用 inner 包裹以精準貼合文字，不再為外層 span 加上背景
+        span.innerHTML = `<span class="part-hit-inner">${span.textContent}</span>`;
+        span.dataset.highlighted = 'true';
+        span.dataset.partKey = key;
+        const inner = span.querySelector('.part-hit-inner');
+        if (inner) { inner.dataset.partKey = key; bindPartEvent(inner, key); }
       } else if (normSpan.includes(cleanMatched) && !span.children.length) {
         const parts = cleanMatched.split('-');
         const m = span.textContent.match(new RegExp(parts.join('[\\s－–—]*'), 'i'));
@@ -1108,12 +1187,17 @@ function highlightPartNumbers(layerDiv) {
           const inner = span.querySelector('.part-hit-inner');
           if (inner) { inner.dataset.partKey = key; bindPartEvent(inner, key); }
         } else {
-          span.classList.add('part-hit'); span.dataset.partKey = key; bindPartEvent(span, key);
+          span.innerHTML = `<span class="part-hit-inner">${span.textContent}</span>`;
+          const inner = span.querySelector('.part-hit-inner');
+          if (inner) { inner.dataset.partKey = key; bindPartEvent(inner, key); }
         }
         span.dataset.highlighted = 'true';
       } else {
-        span.classList.add('part-hit'); span.dataset.highlighted = 'true'; span.dataset.partKey = key;
-        bindPartEvent(span, key);
+        span.innerHTML = `<span class="part-hit-inner">${span.textContent}</span>`;
+        span.dataset.highlighted = 'true';
+        span.dataset.partKey = key;
+        const inner = span.querySelector('.part-hit-inner');
+        if (inner) { inner.dataset.partKey = key; bindPartEvent(inner, key); }
       }
     });
     if (match[0].length === 0) regex.lastIndex++;
@@ -1138,12 +1222,12 @@ function rebuildAssemblyOptions() {
       updateCustomSelectUI(val);
 
       if (val === 'all') {
-        renderPartList('all');
+        renderPartList('all', 0, true); // 🎯 傳入 true
       } else {
         const idx = parseInt(val, 10);
         if (!isNaN(idx)) {
           currentPageIndex = idx;
-          renderPartList('page', idx);
+          renderPartList('page', idx, true); // 🎯 傳入 true
           scrollToPage(idx);
         }
       }
@@ -1167,8 +1251,6 @@ function updateCustomSelectUI(val) {
 
 $('customSelectTrigger').addEventListener('click', (e) => {
   e.stopPropagation();
-  
-  // 🎯 1. 強制立即同步當前頁面，防止快速點擊下一頁造成延遲
   syncCurrentPage(true);
   
   const optsContainer = $('customOptions');
@@ -1176,13 +1258,11 @@ $('customSelectTrigger').addEventListener('click', (e) => {
   const isOpen = optsContainer.classList.toggle('open');
   
   if (isOpen) {
-    // 🎯 2. 使用 Fixed 定位，避免選單因為頁面滾動跑掉
     const rect = trigger.getBoundingClientRect();
     optsContainer.style.top = (rect.bottom + 4) + 'px';
     optsContainer.style.left = rect.left + 'px';
     optsContainer.style.width = rect.width + 'px';
 
-    // 🎯 3. 使用 offsetTop 並移除平滑滾動，徹底解決交替失效與跳回頂部的問題
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const selectedOpt = optsContainer.querySelector('.custom-option.selected');
@@ -1235,8 +1315,8 @@ $('btnNextPage').addEventListener('click', () => {
 });
 
 
-/* ================= 零件清單渲染 (完美顯示項次) ================= */
-function renderPartList(mode = 'page', pageIdx = 0) {
+/* ================= 零件清單渲染 ================= */
+function renderPartList(mode = 'page', pageIdx = 0, scrollToTop = false) {
   const box = $('partList');
   let keys = [];
   
@@ -1262,19 +1342,23 @@ function renderPartList(mode = 'page', pageIdx = 0) {
   
   if (!keys.length) {
     box.innerHTML = `<p style="color:var(--muted);font-size:13px;text-align:center;padding:30px 14px;">無零件資料。</p>`;
+    if (scrollToTop) box.scrollTop = 0;
     return;
   }
 
   let html = '';
-  keys.forEach(key => {
-    const info = partInfoMap.get(key);
+  keys.forEach(itemOrKey => {
+    // 🎯 同時支援物件 (Yamaha) 與字串 (Honda/Kawasaki)
+    let key = typeof itemOrKey === 'string' ? itemOrKey : itemOrKey.key;
+    let info = typeof itemOrKey === 'string' ? partInfoMap.get(key) : itemOrKey;
+    if (!info) return; 
+
     const pickData = pickList.get(key);
     const inPick = pickData !== undefined;
     const btnText = inPick ? `✓ 已加入 (${pickData.qty})` : '＋ PickList';
     const btnClass = inPick ? 'add-btn added' : 'add-btn';
     const sel = key === selectedKey ? ' selected' : '';
     
-    // 🎯 將項次顯示在零件名稱前面，方便對照原圖
     const itemPrefix = info.itemNo ? `<span style="color:#94a3b8;font-size:12px;margin-right:6px;">[${esc(info.itemNo)}]</span>` : '';
     
     html += `<div class="part-row${sel}" data-key="${esc(key)}">
@@ -1285,12 +1369,15 @@ function renderPartList(mode = 'page', pageIdx = 0) {
     </div>`;
   });
   box.innerHTML = html;
+  
+  // 🎯 依照需求重置滾動條
+  if (scrollToTop) box.scrollTop = 0;
 
   box.querySelectorAll('.part-row').forEach(row => {
     row.addEventListener('click', e => {
       if (e.target.closest('.add-btn')) return;
       selectedKey = row.dataset.key;
-      renderPartList(mode, pageIdx);
+      renderPartList(mode, pageIdx); // 點擊單一零件不重置滾動條
     });
   });
   box.querySelectorAll('.add-btn').forEach(btn => {
@@ -1349,11 +1436,13 @@ function renderPickList() {
   let html = '', totalQty = 0;
   for (const [key, data] of pickList) {
     totalQty += data.qty;
+    // 🎯 在 PickList 名稱前加上項次
+    const itemPrefix = data.itemNo ? `<span style="color:#94a3b8;font-size:12px;margin-right:6px;">[${esc(data.itemNo)}]</span>` : '';
     html += `<div class="pick-item">
       <div class="pick-item-top">
         <div>
           <div class="pk-no">${esc(key)}</div>
-          <div class="pk-name">${esc(data.name)}</div>
+          <div class="pk-name">${itemPrefix}${esc(data.name)}</div>
           <span class="pk-cat">${esc(data.category)}</span>
         </div>
         <button class="del-pk" data-del-pk="${esc(key)}" title="移除">✕</button>
@@ -1447,7 +1536,7 @@ $('btnExcel').addEventListener('click', () => {
 });
 
 /* ================= 初始化 ================= */
-renderPartList('page', 0);
+renderPartList('page', 0, true);
 renderPickList();
 </script>
 </body>
