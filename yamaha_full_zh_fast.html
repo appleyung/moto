@@ -1,0 +1,1462 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>零件圖 PDF → EPC 模式 (EPC_V20_2 - Lazy Loading)</title>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<style>
+  :root{
+    --bg:#f5f6f8; --panel:#fff; --line:#e3e6ea; --text:#1f2933; --muted:#7b8794;
+    --primary:#2563eb; --primary-d:#1d4ed8; --danger:#dc2626;
+    --epc-blue:#1a5276; --epc-light:#eaf2f8; --epc-gold:#b7950b;
+  }
+  *{box-sizing:border-box;}
+  
+  * {
+    -webkit-touch-callout: none !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+  }
+  input, textarea {
+    -webkit-touch-callout: default !important;
+    -webkit-user-select: text !important;
+    user-select: text !important;
+  }
+
+  html, body { height: 100vh; height: 100dvh; margin: 0; overflow: hidden; }
+  body{ background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft JhengHei","PingFang TC",sans-serif; font-size:14px; line-height:1.5; display: flex; flex-direction: column; }
+
+  header { padding: 10px 20px; background: var(--epc-blue); color:#fff; z-index: 10; flex: none; display:flex; align-items:center; justify-content:space-between; }
+  header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
+  header .sub{color:#a9cce3;margin:0;font-size:11px;margin-left:12px;}
+
+  .layout { display: flex; flex: 1; overflow: hidden; height: 100%; min-height: 0; position: relative;}
+
+  .left-pane { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; min-height: 0; }
+
+  .epc-toolbar {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px;
+    padding: 6px 8px; background: #fff; border-bottom: 1px solid var(--line);
+    flex: none; flex-wrap: nowrap; z-index: 100;
+  }
+  
+  .search-group {
+    flex: 1; display: flex; align-items: center; min-width: 60px;
+  }
+  .search-group input {
+    width: 100%; height: 30px; padding: 0 8px; border: 1px solid #cdd5df; border-radius: 6px; 
+    font-size: 13px; background: #fbfcfd;
+  }
+  .search-group input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+  /* 🎯 記憶體/快取監控指示器 */
+  .ram-indicator {
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+    padding: 0 2px;
+    font-family: monospace;
+    flex: none;
+  }
+
+  /* 🎯 縮小後的縮放控制項 */
+  .pdf-controls {
+    display: flex; align-items: center; gap: 0px; flex: none;
+    background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; height: 26px; padding: 0 1px;
+  }
+  .pdf-controls button {
+    background: transparent; border: none; color: var(--epc-blue); font-size: 13px; 
+    width: 20px; height: 20px; display: grid; place-items: center; cursor: pointer; border-radius: 4px;
+  }
+  .pdf-controls button:hover { background: #e2e8f0; }
+  .pdf-controls .zoom-input-group { display: flex; align-items: center; margin: 0 1px; }
+  .pdf-controls input { width: 24px; background: transparent; border: none; color: var(--text); font-size: 10px; font-weight: 600; text-align: right; padding: 0; -moz-appearance: textfield; }
+  .pdf-controls input::-webkit-outer-spin-button, .pdf-controls input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .pdf-controls span { font-size: 10px; font-weight: 600; margin-left: 0px; }
+  
+  .menu-wrapper { position: relative; flex: none; }
+  .menu-toggle-btn {
+    display: flex; width: 30px; height: 30px; border-radius: 6px;
+    background: #f1f5f9; border: 1px solid #cbd5e1; color: var(--epc-blue);
+    font-size: 18px; font-weight: bold; cursor: pointer; align-items: center; justify-content: center;
+    transition: 0.2s;
+  }
+  .menu-toggle-btn:hover { background: #e2e8f0; }
+  
+  .dropdown-menu {
+    display: none; position: absolute; right: 0; top: 100%; margin-top: 6px;
+    background: #fff; border: 1px solid #cbd5e1; border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 1000; width: 210px; flex-direction: column;
+  }
+  .dropdown-menu.open { display: flex; }
+  .menu-item {
+    padding: 10px 14px; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid #f1f3f5; color: var(--text); transition: background 0.15s;
+  }
+  .menu-item:last-child { border-bottom: none; }
+  .menu-item:hover { background: #f0f6ff; }
+
+  .pdf-viewport-wrapper {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    min-height: 0; 
+    background: #525659;
+  }
+  .pdf-viewport { 
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    overflow: auto; 
+    padding: 20px; 
+    -webkit-overflow-scrolling: touch;
+  }
+  #emptyState { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #ddd; pointer-events: none; z-index: 5; width: 100%; padding: 0 20px; }
+  #emptyState p { font-size: 60px; margin: 0; }
+  #emptyState span { font-size: 16px; display: block; margin-top: 10px; }
+  
+  .pdf-container { display: flex; flex-direction: column; align-items: center; gap: 20px; transform-origin: top center; margin: 0 auto; width: fit-content; }
+  
+  .page-container { position: relative; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  .page-container canvas { display: block; }
+  .page-container.placeholder { background: #e2e8f0; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 14px; }
+
+  .textLayer { position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: hidden; line-height: 1; transform-origin: 0 0; pointer-events: none; }
+  .textLayer > span { color: transparent; position: absolute; white-space: pre; cursor: inherit; transform-origin: 0% 0%; pointer-events: none; }
+
+  /* 🎯 針對高亮進行優化：移除外層背景，只高亮內層文字 */
+  .textLayer > span.part-hit {
+    background: transparent !important;
+    cursor: pointer !important; pointer-events: auto !important;
+    color: transparent !important; z-index: 2; 
+    touch-action: pan-y; 
+  }
+  
+  .textLayer .part-hit-inner {
+    background: rgba(255, 235, 59, 0.6) !important;
+    border-radius: 2px; cursor: pointer !important; pointer-events: auto !important;
+    color: transparent !important; 
+    display: inline-block !important;
+    width: fit-content !important;
+    height: auto !important;
+    padding: 0 !important; margin: 0 !important;
+    line-height: 1.2 !important;
+    vertical-align: bottom !important;
+  }
+
+  .textLayer > span.part-hit:hover, .textLayer .part-hit-inner:hover {
+    background: rgba(255, 152, 0, 0.85) !important;
+  }
+
+  .sidebar { width: 400px; max-width: 440px; flex: none; background: #fff; border-left: 1px solid var(--line); display: flex; flex-direction: column; z-index: 10; overflow: hidden; min-height: 0; }
+  .sidebar-tabs { display: flex; border-bottom: 1px solid var(--line); flex: none; background: #f8fafc; }
+  .sidebar-tab { flex: 1; padding: 11px 8px; text-align: center; font-size: 13px; font-weight: 700; color: var(--muted); cursor: pointer; border: none; background: transparent; border-bottom: 3px solid transparent; transition: .15s; }
+  .sidebar-tab.active { color: var(--epc-blue); border-bottom-color: var(--epc-blue); background: #fff; }
+  .sidebar-tab .cnt { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px; background: #e2e8f0; color: #475569; font-size: 11px; margin-left: 4px; }
+  .sidebar-tab.active .cnt { background: var(--epc-light); color: var(--epc-blue); }
+
+  .sidebar-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
+  .panel-view { display: none; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
+  .panel-view.active { display: flex; }
+
+  .list-page-controls {
+    display: flex; align-items: center; gap: 6px;
+    padding: 10px 14px; background: #fbfcfd; flex: none;
+    border-bottom: 1px solid var(--line);
+    position: relative;
+    z-index: 50;
+  }
+  .list-page-controls button.nav-btn {
+    background: #f1f5f9; border: 1px solid #cbd5e1; color: var(--epc-blue);
+    border-radius: 6px; width: 32px; height: 32px; flex: none; cursor: pointer;
+    display: grid; place-items: center; font-size: 14px; font-weight: bold;
+    transition: 0.15s;
+  }
+  .list-page-controls button.nav-btn:hover { background: #e2e8f0; }
+
+  .custom-select-wrapper {
+    flex: 1; position: relative; user-select: none; min-width: 0;
+  }
+  .custom-select-trigger {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 32px; padding: 0 10px; font-size: 13px;
+    border: 1px solid #b0c4d8; border-radius: 6px; background: #fff;
+    color: var(--text); cursor: pointer; white-space: nowrap; overflow: hidden;
+  }
+  .custom-select-trigger::after {
+    content: '▼'; font-size: 10px; margin-left: 8px; color: var(--muted);
+  }
+  
+  .custom-options {
+    display: none; position: fixed; 
+    background: #fff; border: 1px solid #b0c4d8; border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 99999;
+    max-height: 160px;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  .custom-options.open { display: block; }
+  
+  .custom-option {
+    padding: 8px 10px; font-size: 13px; cursor: pointer;
+    border-bottom: 1px solid #f1f3f5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .custom-option:last-child { border-bottom: none; }
+  .custom-option:hover { background: #f0f6ff; }
+  .custom-option.selected { background: var(--epc-light); color: var(--epc-blue); font-weight: bold; }
+
+  .part-list { flex: 1; overflow-y: auto; padding: 6px 0; -webkit-overflow-scrolling: touch; }
+  .part-row {
+    display: grid; grid-template-columns: 1fr auto;
+    gap: 2px 10px; padding: 9px 14px; border-bottom: 1px solid #f1f3f5;
+    cursor: pointer; transition: background .12s; align-items: center;
+  }
+  .part-row:hover { background: #f0f6ff; }
+  .part-row.selected { background: #fff8e1; box-shadow: inset 3px 0 0 var(--epc-gold); }
+  .part-row .pno { font-family: ui-monospace, Consolas, monospace; font-weight: 800; font-size: 13.5px; color: #1e293b; grid-column: 1; }
+  .part-row .pname { font-size: 12px; color: #475569; grid-column: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .part-row .pmeta { grid-column: 2; grid-row: 1 / 3; text-align: right; font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .part-row .pmeta .qty { font-weight: 800; color: var(--epc-blue); font-size: 13px; }
+  .part-row .add-btn { grid-column: 2; grid-row: 3; justify-self: end; font-size: 11px; padding: 2px 8px; border-radius: 4px; border: 1px solid #b0c4d8; background: #fff; color: var(--epc-blue); cursor: pointer; font-weight: 700; transition: .2s; }
+  .part-row .add-btn:hover { background: var(--epc-light); }
+  .part-row .add-btn.added { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+
+  .picklist-list { flex: 1; overflow-y: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; -webkit-overflow-scrolling: touch; }
+  .pick-item { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: #fff; }
+  .pick-item-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+  .pick-item .pk-no { font-family: ui-monospace, Consolas, monospace; font-weight: 800; font-size: 14px; color: #1e293b; }
+  .pick-item .pk-name { font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .pick-item .pk-cat { font-size: 10px; background: var(--epc-light); color: var(--epc-blue); padding: 1px 5px; border-radius: 3px; display: inline-block; margin-top: 4px; font-weight: 700; }
+  .pick-item .del-pk { border: none; background: transparent; color: #94a3b8; font-size: 16px; cursor: pointer; padding: 0 2px; }
+  .pick-item .del-pk:hover { color: var(--danger); }
+  .pick-item-bottom { display: flex; justify-content: flex-end; align-items: center; margin-top: 8px; gap: 6px; }
+  .pick-qty { display: flex; align-items: center; gap: 4px; }
+  .pick-qty button { width: 26px; height: 26px; border: 1px solid var(--line); background: #f8fafc; border-radius: 5px; cursor: pointer; font-size: 14px; display: grid; place-items: center; }
+  .pick-qty input { width: 44px; text-align: center; padding: 2px; border: 1px solid var(--line); border-radius: 5px; font-weight: 700; font-size: 13px; }
+  .pick-empty { color: var(--muted); font-size: 13px; text-align: center; margin-top: 40px; line-height: 2; }
+  .pick-empty strong { display: block; font-size: 15px; color: #64748b; margin-bottom: 4px; }
+
+  .pick-footer { padding: 12px 14px; border-top: 1px solid var(--line); background: #fafafa; flex: none; }
+  .pick-summary { font-size: 12px; color: var(--muted); text-align: center; margin-bottom: 8px; }
+  .pick-actions { display: flex; gap: 6px; }
+  .btn-outline-danger { padding: 8px 12px; background: #fff; color: var(--danger); border: 1px solid #fecaca; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .btn-outline-danger:hover { background: #fef2f2; }
+  .btn-outline-danger:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-main { flex: 1; padding: 8px; background: var(--epc-blue); color: #fff; border: none; border-radius: 7px; font-size: 14px; font-weight: 700; cursor: pointer; }
+  .btn-main:hover { background: #154360; }
+
+  #dragOverlay { position: fixed; inset: 0; background: rgba(37, 99, 235, 0.85); z-index: 3000; display: none; justify-content: center; align-items: center; flex-direction: column; gap: 16px; color: #fff; pointer-events: none; backdrop-filter: blur(4px); }
+  #dragOverlay.active { display: flex; }
+  #dragOverlay .icon { font-size: 72px; animation: bounce 1s infinite alternate; }
+  @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-20px); } }
+  #loading { display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.9); z-index: 2500; place-items: center; font-size: 18px; font-weight: bold; color: var(--primary); text-align: center; line-height: 1.8; }
+  #loading.show { display: grid; }
+
+  .modal { display: none; position: fixed; inset: 0; background: rgba(15,23,42,.4); z-index: 2000; }
+  .modal.open { display: block; }
+  .modal-box { background: #fff; border-radius: 12px; width: 100%; max-width: 600px; box-shadow: 0 20px 50px rgba(0,0,0,.25); position: absolute; top: 50px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; max-height: 85vh; }
+  .modal-header { padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; background: var(--epc-light); border-radius: 12px 12px 0 0; flex-shrink: 0; }
+  .modal-header h3 { margin: 0; font-size: 16px; color: var(--epc-blue); }
+  .modal-close-btn { background: none; border: none; font-size: 20px; color: var(--muted); cursor: pointer; }
+  .modal-body-wrap { padding: 18px; overflow-y: auto; flex: 1; }
+  .modal-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  .modal-table th, .modal-table td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; }
+  .modal-table th { color: var(--muted); font-weight: 600; font-size: 12.5px; }
+  .modal-table td:last-child, .modal-table th:last-child { text-align: right; }
+  .modal-table td:first-child { font-family: ui-monospace, Consolas, monospace; font-weight: 700; }
+  .modal-actions { display: flex; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--line); justify-content: center; flex-wrap: wrap; background: #fff; border-radius: 0 0 12px 12px; flex-shrink: 0; }
+  .btn-success { background: #10b981; color: #fff; border: none; padding: 8px 16px; border-radius: 7px; cursor: pointer; }
+  .btn-primary { background: var(--primary); color: #fff; border: none; padding: 8px 16px; border-radius: 7px; cursor: pointer; }
+
+  @media (max-width: 1024px) {
+    header { display: none; }
+    .sidebar { width: 340px; max-width: 380px; }
+  }
+  
+  @media (max-width: 768px) and (orientation: portrait) {
+    .layout { flex-direction: column; }
+    .left-pane { 
+      flex: none; 
+      height: 55vh; 
+      border-bottom: 2px solid var(--line); 
+    }
+    .sidebar { 
+      width: 100%; 
+      max-width: none; 
+      flex: 1; 
+      min-height: 0; 
+      border-left: none; 
+    }
+  }
+  @media (max-width: 1024px) and (orientation: landscape) {
+    .sidebar { width: 38%; max-width: 400px; }
+    .modal-box { top: 10px; max-height: calc(100dvh - 20px); width: 95%; max-width: 700px; }
+  }
+  * { -webkit-tap-highlight-color: transparent; }
+  @media print {
+    html, body { background: #fff !important; overflow: visible !important; height: auto !important; }
+    .layout, header, #loading, #dragOverlay { display: none !important; }
+    .modal { position: static !important; display: block !important; background: none; padding: 0; }
+    .modal-box { position: static !important; transform: none !important; box-shadow: none; border: none; max-width: none; width: 100%; max-height: none; }
+    .modal-header { border: none; padding: 0 0 10px; background: none; }
+    .modal-close-btn, .modal-actions { display: none !important; }
+    .modal-body-wrap { overflow: visible; padding: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="dragOverlay">
+  <div class="icon">📥</div>
+  <div>放開以載入 PDF 檔案</div>
+</div>
+
+<header>
+  <div style="display:flex;align-items:baseline;">
+    <h1>零件圖 PDF → EPC 模式 (V20.2)</h1>
+    <span class="sub">支援多語言解析與翻譯</span>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="left-pane">
+    <div class="epc-toolbar">
+      <div class="search-group">
+        <input type="search" id="partSearch" placeholder="搜尋零件號碼或名稱...">
+      </div>
+      
+      <!-- 🎯 記憶體/快取監控指示器 -->
+      <div id="ramUsage" class="ram-indicator" title="當前網頁 Canvas 佔用容量">快取: 0.0 MB</div>
+
+      <!-- 🎯 縮小後的縮放控制項 -->
+      <div class="pdf-controls">
+        <button id="btnZoomOut" title="縮小">−</button>
+        <div class="zoom-input-group">
+          <input type="number" id="zoomText" min="20" max="500" step="10" value="100">
+          <span>%</span>
+        </div>
+        <button id="btnZoomIn" title="放大">+</button>
+      </div>
+
+      <div class="menu-wrapper">
+        <button class="menu-toggle-btn" id="btnMenuToggle" title="選單">☰</button>
+        <div class="dropdown-menu" id="dropdownMenu">
+          <!-- 🎯 識別字眼: Yamaha 上傳按鈕 (Y牌+PDF Icon) -->
+          <div class="menu-item" onclick="document.getElementById('fileInputYamaha').click()">
+            <span style="color:#e11d48; font-family:monospace; font-weight:bold;">Y</span>牌 
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle;">
+              <path d="M14 2H6C4.89543 2 4 4 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" fill="#dc2626"/>
+              <path d="M14 2V8H20" stroke="white" stroke-width="1.5"/>
+              <text x="4.5" y="17" font-family="Arial" font-size="7" font-weight="bold" fill="white">PDF</text>
+            </svg>
+          </div>
+          <!-- 🎯 識別字眼: Honda 上傳按鈕 (H牌+PDF Icon) -->
+          <div class="menu-item" onclick="document.getElementById('fileInputHonda').click()">
+            <span style="color:#0284c7; font-family:monospace; font-weight:bold;">H</span>牌 
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle;">
+              <path d="M14 2H6C4.89543 2 4 4 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" fill="#dc2626"/>
+              <path d="M14 2V8H20" stroke="white" stroke-width="1.5"/>
+              <text x="4.5" y="17" font-family="Arial" font-size="7" font-weight="bold" fill="white">PDF</text>
+            </svg>
+          </div>
+          <!-- 🎯 識別字眼: Kawasaki 上傳按鈕 (K牌+PDF Icon) -->
+          <div class="menu-item" onclick="document.getElementById('fileInputKawasaki').click()">
+            <span style="color:#16a34a; font-family:monospace; font-weight:bold;">K</span>牌 
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle;">
+              <path d="M14 2H6C4.89543 2 4 4 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" fill="#dc2626"/>
+              <path d="M14 2V8H20" stroke="white" stroke-width="1.5"/>
+              <text x="4.5" y="17" font-family="Arial" font-size="7" font-weight="bold" fill="white">PDF</text>
+            </svg>
+          </div>
+          <div class="menu-item" onclick="document.getElementById('fileInputRotate').click()">
+            <span style="color:#0284c7;">🔄</span> 強制橫放並轉正
+          </div>
+          <div class="menu-item" onclick="document.getElementById('fileInputDecrypt').click()">
+            <span>🔑</span> 解鎖 PDF
+          </div>
+        </div>
+      </div>
+      
+      <input type="file" id="fileInputYamaha" accept=".pdf,application/pdf" style="display:none;">
+      <input type="file" id="fileInputHonda" accept=".pdf,application/pdf" style="display:none;">
+      <input type="file" id="fileInputKawasaki" accept=".pdf,application/pdf" style="display:none;">
+      <input type="file" id="fileInputRotate" accept=".pdf,application/pdf" style="display:none;">
+      <input type="file" id="fileInputDecrypt" accept=".pdf,application/pdf" style="display:none;">
+    </div>
+
+    <div class="pdf-viewport-wrapper">
+      <div class="pdf-viewport" id="pdfViewport">
+        <div id="emptyState">
+          <p>📄</p>
+          <span>請拖曳 PDF 到此處，或點擊右上角選單上傳</span>
+        </div>
+        <div class="pdf-container" id="pdfContainer"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div class="sidebar-tabs">
+      <button class="sidebar-tab active" data-view="list">📋 零件清單<span class="cnt" id="listCount">0</span></button>
+      <button class="sidebar-tab" data-view="pick">🛒 PickList<span class="cnt" id="pickCount">0</span></button>
+    </div>
+
+    <div class="sidebar-body">
+      <div class="panel-view active" id="viewList">
+        <div class="list-page-controls">
+          <button id="btnPrevPage" class="nav-btn" title="上一頁">◀</button>
+          <div class="custom-select-wrapper" id="customSelectWrapper">
+            <div class="custom-select-trigger" id="customSelectTrigger">⭐ 顯示所有零件</div>
+            <div class="custom-options" id="customOptions"></div>
+          </div>
+          <button id="btnNextPage" class="nav-btn" title="下一頁">▶</button>
+        </div>
+        <div class="part-list" id="partList"></div>
+      </div>
+
+      <div class="panel-view" id="viewPick">
+        <div class="picklist-list" id="pickListBox">
+          <div class="pick-empty"><strong>PickList 是空的</strong>從「零件清單」或圖面點擊加入</div>
+        </div>
+        <div class="pick-footer">
+          <div class="pick-summary" id="pickSummary"></div>
+          <div class="pick-actions">
+            <button class="btn-outline-danger" id="btnClearPick" disabled>🗑️ 清空</button>
+            <button class="btn-main" id="btnExportPick">匯出清單</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="loading">處理 PDF 中，請稍候…</div>
+
+<div id="modal" class="modal">
+  <div class="modal-box" id="modalBox">
+    <div class="modal-header">
+      <h3 id="modalHeading">PickList 匯出</h3>
+      <button class="modal-close-btn" id="btnClose">✕</button>
+    </div>
+    <div class="modal-body-wrap"><div id="modalBody"></div></div>
+    <div class="modal-actions">
+      <button id="btnCopy" class="btn-success">📋 複製文字</button>
+      <button id="btnPrint">🖨️ 列印 / 存 PDF</button>
+      <button id="btnExcel" class="btn-primary">📊 下載 CSV</button>
+    </div>
+  </div>
+</div>
+
+<script>
+if (typeof pdfjsLib === 'undefined') {
+  alert('PDF.js 載入失敗，請檢查網路連線。');
+} else {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+}
+let jsPDF = null;
+if (typeof window.jspdf !== 'undefined') { jsPDF = window.jspdf.jsPDF; }
+
+document.addEventListener('contextmenu', e => e.preventDefault());
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function getTimestamp() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+/* ================= 記憶體/快取監控 (計算 Canvas 體積) ================= */
+function updateRamUsage() {
+  const ramEl = $('ramUsage');
+  if (!ramEl) return;
+  
+  let totalBytes = 0;
+  renderedPages.forEach(idx => {
+    const pageDiv = container.querySelector(`.page-container[data-page-index="${idx}"]`);
+    const canvas = pageDiv ? pageDiv.querySelector('canvas') : null;
+    if (canvas) {
+      // 每個像素佔用 4 bytes (RGBA)
+      totalBytes += canvas.width * canvas.height * 4; 
+    }
+  });
+  
+  const totalMB = (totalBytes / (1024 * 1024)).toFixed(1);
+  ramEl.textContent = `快取: ${totalMB} MB`;
+}
+// 啟動定時器，每 1000ms 更新一次
+setInterval(updateRamUsage, 1000);
+
+
+/* ================= 下拉選單邏輯 ================= */
+$('btnMenuToggle').addEventListener('click', (e) => {
+  e.stopPropagation();
+  $('dropdownMenu').classList.toggle('open');
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.menu-wrapper')) {
+    $('dropdownMenu').classList.remove('open');
+  }
+});
+
+/* ================= 翻譯字典 ================= */
+const TRANSLATIONS = {}; 
+function translateText(text) { return text; }
+
+/* ================= 資料層 ================= */
+const HONDA_PART_REGEX = /\b[A-Z0-9]{3,7}\s*[-－–—]\s*[A-Z0-9]{2,6}(?:\s*[-－–—]\s*[A-Z0-9]{2,8}){0,2}\b/gi;
+const KAWASAKI_PART_REGEX = /\b\d{5}\s*-\s*[A-Z0-9]{3,5}(?:\s*-\s*[A-Z0-9]{2,4})?\b|\b\d{5}[A-Z]{1,2}\b|\b\d{3}[A-Z]{2}\d{4}\b/gi;
+const YAMAHA_PART_REGEX = /\b[0-9A-Z]{3,5}\s*-\s*[0-9A-Z]{2,5}(?:\s*-\s*[0-9A-Z]{1,3}){0,2}\b/gi;
+
+const partInfoMap = new Map();          
+const pagePartKeys = new Map();         
+const pageTitles = new Map();           
+const pickList = new Map();             
+let selectedKey = null;                 
+let currentPageIndex = 0;
+let isScrollingProgrammatically = false;
+let currentSelectValue = 'all';
+let currentMode = 'yamaha'; 
+let currentPdfDoc = null; 
+let renderedPages = new Set(); 
+
+const normalizePartNo = s => String(s).replace(/[－–—]/g, '-').replace(/\s+/g, '').toUpperCase();
+function normalizeText(t) {
+  return t.replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0))
+          .replace(/[－–—]/g, '-').replace(/\s+/g, '').toUpperCase();
+}
+function parsePartNo(rawStr, mode = 'yamaha') {
+  let cleanStr = normalizeText(rawStr);
+  if (mode === 'kawasaki') return { partNo: cleanStr, itemNo: '' };
+  if (!cleanStr.includes('-')) return { partNo: cleanStr, itemNo: '' };
+  let parts = cleanStr.split('-'), itemNo = '';
+  if (parts.length >= 2) {
+    let first = parts[0];
+    if (first.length > 5 && /^[A-Z0-9]+$/.test(first)) { 
+      itemNo = first.substring(0, first.length - 5); 
+      parts[0] = first.substring(first.length - 5); 
+    }
+  }
+  return { partNo: parts.join('-'), itemNo };
+}
+
+/* ================= 縮放與原生滑動 ================= */
+const RENDER_SCALE = (window.innerWidth <= 1024) ? 2 : 3;
+let scale = 1;
+const viewport = $('pdfViewport');
+const container = $('pdfContainer');
+const zoomInput = $('zoomText');
+const emptyState = $('emptyState');
+
+function applyZoom(newScale) {
+  scale = Math.max(0.2, Math.min(newScale, 5));
+  container.style.zoom = scale / RENDER_SCALE;
+  zoomInput.value = Math.round(scale * 100);
+  
+  container.style.display = 'none';
+  void container.offsetHeight;
+  container.style.display = 'flex';
+
+  clearTimeout(window._zoomRenderTimeout);
+  window._zoomRenderTimeout = setTimeout(() => {
+    syncCurrentPage();
+  }, 150);
+}
+
+function fitWidth() {
+  if (!container.firstElementChild) return;
+  const firstPage = container.firstElementChild;
+  const rawWidth = parseFloat(firstPage.style.width) / RENDER_SCALE;
+  if (!rawWidth) return;
+  const viewportWidth = viewport.clientWidth - 40;
+  applyZoom(viewportWidth / rawWidth);
+}
+
+$('btnZoomIn').onclick = () => applyZoom(scale + 0.2);
+$('btnZoomOut').onclick = () => applyZoom(scale - 0.2);
+zoomInput.addEventListener('keydown', e => { if (e.key === 'Enter') zoomInput.blur(); });
+const handleZoomInput = () => {
+  let v = parseFloat(zoomInput.value);
+  if (!isNaN(v) && v >= 20 && v <= 500) applyZoom(v / 100);
+  else zoomInput.value = Math.round(scale * 100);
+};
+zoomInput.addEventListener('change', handleZoomInput);
+zoomInput.addEventListener('blur', handleZoomInput);
+viewport.addEventListener('wheel', e => {
+  if (e.ctrlKey || e.metaKey) { e.preventDefault(); applyZoom(scale + (e.deltaY > 0 ? -0.1 : 0.1)); }
+}, { passive: false });
+
+let initialPinchDistance = null, initialScale = 1, isPinching = false, rafId = null;
+viewport.addEventListener('touchstart', e => {
+  if (e.touches.length === 2) {
+    initialPinchDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    initialScale = scale; isPinching = true;
+  }
+}, { passive: true });
+
+viewport.addEventListener('touchmove', e => {
+  if (e.touches.length === 2 && initialPinchDistance && isPinching) {
+    if (e.cancelable) e.preventDefault(); 
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => {
+      const currentDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      applyZoom(Math.max(0.2, Math.min(initialScale * (currentDistance / initialPinchDistance), 5)));
+      rafId = null;
+    });
+  }
+}, { passive: false });
+
+viewport.addEventListener('touchend', e => {
+  if (e.touches.length < 2) {
+    initialPinchDistance = null; isPinching = false;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  }
+});
+
+/* ================= 核心：動態渲染與釋放 (已調整順序) ================= */
+async function renderPagesInRange(centerIndex) {
+  if (!currentPdfDoc) return;
+
+  // 🎯 修改 1：動態決定渲染頁數範圍 (手機 5 頁，電腦 11 頁)
+  const isMobile = window.innerWidth <= 1024;
+  const pageRange = isMobile ? 2 : 5; // 前後各幾頁
+  
+  const start = Math.max(0, centerIndex - pageRange);
+  const end = Math.min(currentPdfDoc.numPages - 1, centerIndex + pageRange);
+
+  // 🎯 修改 2：先釋放記憶體 (清除範圍外的頁面)
+  const toRemove = [];
+  renderedPages.forEach(idx => {
+    if (idx < start || idx > end) toRemove.push(idx);
+  });
+  
+  toRemove.forEach(idx => {
+    const pageDiv = container.querySelector(`.page-container[data-page-index="${idx}"]`);
+    if (pageDiv) {
+       pageDiv.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;">載入中...</div>';
+       pageDiv.classList.add('placeholder');
+    }
+    renderedPages.delete(idx);
+  });
+  updateRamUsage(); // 釋放後立即更新容量
+
+  // 渲染範圍內的頁面
+  for (let i = start; i <= end; i++) {
+    if (!renderedPages.has(i)) {
+      await renderSinglePage(i);
+    }
+  }
+}
+
+async function renderSinglePage(pageIndex) {
+  const pageDiv = container.querySelector(`.page-container[data-page-index="${pageIndex}"]`);
+  if (!pageDiv || renderedPages.has(pageIndex)) return;
+  
+  renderedPages.add(pageIndex);
+  
+  try {
+    const page = await currentPdfDoc.getPage(pageIndex + 1);
+    const vpPDF = page.getViewport({ scale: RENDER_SCALE, rotation: 0 });
+    
+    pageDiv.innerHTML = '';
+    pageDiv.classList.remove('placeholder');
+    
+    const canvas = document.createElement('canvas'); 
+    const ctx = canvas.getContext('2d');
+    canvas.width = vpPDF.width; 
+    canvas.height = vpPDF.height;
+    pageDiv.appendChild(canvas);
+    
+    await page.render({ canvasContext: ctx, viewport: vpPDF }).promise;
+    
+    const textLayerDiv = document.createElement('div');
+    textLayerDiv.className = 'textLayer';
+    textLayerDiv.style.width = vpPDF.width + 'px'; 
+    textLayerDiv.style.height = vpPDF.height + 'px';
+    pageDiv.appendChild(textLayerDiv);
+    
+    const tc = await page.getTextContent();
+    await pdfjsLib.renderTextLayer({ textContent: tc, container: textLayerDiv, viewport: vpPDF, textDivs: [] }).promise;
+    highlightPartNumbers(textLayerDiv, currentMode);
+    updateRamUsage(); // 渲染完成後立即更新容量
+    
+  } catch (err) {
+    console.error("渲染頁面失敗:", err);
+    renderedPages.delete(pageIndex);
+  }
+}
+
+/* ================= 滾動監聽與當前頁面同步 ================= */
+let scrollTimeout = null;
+function syncCurrentPage() {
+  if (currentSelectValue === 'all' || !currentPdfDoc) return;
+  
+  const pages = document.querySelectorAll('.page-container');
+  if (!pages.length) return;
+  
+  const vpRect = viewport.getBoundingClientRect();
+  const vpCenterY = vpRect.top + vpRect.height / 2;
+  
+  let bestPageIndex = 0;
+  let minDistance = Infinity;
+  
+  pages.forEach(page => {
+    const rect = page.getBoundingClientRect();
+    if (rect.top <= vpCenterY && rect.bottom >= vpCenterY) {
+      bestPageIndex = parseInt(page.dataset.pageIndex, 10);
+      minDistance = 0;
+    } else if (minDistance !== 0) {
+      const pageCenterY = rect.top + rect.height / 2;
+      const distance = Math.abs(pageCenterY - vpCenterY);
+      if (distance < minDistance) {
+        minDistance = distance;
+        bestPageIndex = parseInt(page.dataset.pageIndex, 10);
+      }
+    }
+  });
+
+  renderPagesInRange(bestPageIndex);
+
+  if (currentSelectValue !== String(bestPageIndex)) {
+    currentSelectValue = String(bestPageIndex);
+    updateCustomSelectUI(bestPageIndex);
+    currentPageIndex = bestPageIndex;
+    renderPartList('page', bestPageIndex, true);
+  }
+}
+
+viewport.addEventListener('scroll', () => {
+  if (isScrollingProgrammatically) return;
+  clearTimeout(scrollTimeout);
+  scrollTimeout = setTimeout(syncCurrentPage, 100); 
+});
+
+viewport.addEventListener('touchstart', () => { isScrollingProgrammatically = false; }, { passive: true });
+viewport.addEventListener('mousedown', () => { isScrollingProgrammatically = false; });
+
+/* ================= 檔案處理與旋轉修正 ================= */
+function handleFiles(files, mode = 'yamaha') {
+  let newPdfFile = null;
+  for (const f of files) { if (/\.pdf$/i.test(f.name)) { newPdfFile = f; break; } }
+  if (!newPdfFile) { alert('請提供 PDF 格式的檔案。'); return; }
+  if (container.firstElementChild) {
+    if (!confirm('目前已有開啟的 PDF，是否關閉舊檔並載入新的？\n（零件清單與 PickList 將一併清空）')) return;
+    container.innerHTML = '';
+    partInfoMap.clear(); pagePartKeys.clear(); pageTitles.clear(); pickList.clear(); selectedKey = null; currentPageIndex = 0;
+    renderedPages.clear(); currentPdfDoc = null;
+    renderPartList('page', 0); renderPickList();
+    scale = 1; applyZoom(1); viewport.scrollTop = 0;
+  }
+  currentMode = mode;
+  loadPdf(newPdfFile, mode);
+}
+
+$('fileInputYamaha').addEventListener('change', e => { if (e.target.files.length) { handleFiles(e.target.files, 'yamaha'); e.target.value = ''; } });
+$('fileInputHonda').addEventListener('change', e => { if (e.target.files.length) { handleFiles(e.target.files, 'honda'); e.target.value = ''; } });
+$('fileInputKawasaki').addEventListener('change', e => { if (e.target.files.length) { handleFiles(e.target.files, 'kawasaki'); e.target.value = ''; } });
+
+$('fileInputRotate').addEventListener('change', async (e) => {
+  if (!e.target.files.length) return;
+  const file = e.target.files[0]; e.target.value = '';
+  if (!/\.pdf$/i.test(file.name)) { alert('請提供 PDF 格式的檔案。'); return; }
+  if (typeof PDFLib === 'undefined') { alert('PDF 修改套件未載入，請確認網路連線。'); return; }
+  const loadingEl = $('loading');
+  loadingEl.innerHTML = '正在修改頁面屬性...<br><span style="font-size:13px;font-weight:normal;color:#64748b;">強制全部頁面橫放並轉正</span>';
+  loadingEl.classList.add('show');
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+    const pages = pdfDoc.getPages();
+    pages.forEach(page => {
+      page.setRotation(PDFLib.degrees(0));
+      const { width, height } = page.getSize();
+      if (height > width) page.setSize(height, width);
+    });
+    const pdfBytes = await pdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${file.name.replace(/\.pdf$/i, '')}_landscape_${getTimestamp()}.pdf`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    alert('✅ 處理完成！已保留原始畫質與文字，並將頁面轉為橫放。');
+  } catch (err) {
+    console.error(err); alert('❌ 處理失敗：\n' + err.message);
+  } finally { loadingEl.classList.remove('show'); }
+});
+
+const handleDecrypt = async (e) => {
+  if (!e.target.files.length) return;
+  const file = e.target.files[0]; e.target.value = '';
+  if (!/\.pdf$/i.test(file.name)) { alert('請提供 PDF 格式的檔案。'); return; }
+  if (!jsPDF) { alert('解密套件未載入。'); return; }
+  const loadingEl = $('loading');
+  loadingEl.innerHTML = '正在解密並重新打包...<br><span style="font-size:13px;font-weight:normal;color:#64748b;">處理隱形文字層中</span>';
+  loadingEl.classList.add('show');
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    let pdf;
+    try { pdf = await pdfjsLib.getDocument({ data: arrayBuffer, password: '' }).promise; }
+    catch (err) {
+      const pwd = prompt('此 PDF 受密碼保護，請輸入密碼：');
+      if (pwd === null) throw new Error('使用者取消操作');
+      pdf = await pdfjsLib.getDocument({ data: arrayBuffer, password: pwd }).promise;
+    }
+    let pdfDoc = null;
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const vpR = page.getViewport({ scale: 2.0, rotation: 0 });
+      const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
+      canvas.width = vpR.width; canvas.height = vpR.height;
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvasContext: ctx, viewport: vpR }).promise;
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const vpO = page.getViewport({ scale: 1.0 });
+      const w = vpO.width, h = vpO.height;
+      if (!pdfDoc) pdfDoc = new jsPDF({ orientation: w > h ? 'landscape' : 'portrait', unit: 'pt', format: [w, h] });
+      else pdfDoc.addPage([w, h], w > h ? 'landscape' : 'portrait');
+      pdfDoc.addImage(imgData, 'JPEG', 0, 0, w, h);
+      const tc = await page.getTextContent();
+      pdfDoc.setFont('helvetica');
+      tc.items.forEach(it => {
+        if (/[a-zA-Z0-9]/.test(it.str)) {
+          pdfDoc.setFontSize(it.height || 10);
+          pdfDoc.text(it.str, it.transform[4], h - it.transform[5], { renderingMode: 3 });
+        }
+      });
+    }
+    pdfDoc.save(`${file.name.replace(/\.pdf$/i, '')}_解鎖版_${getTimestamp()}.pdf`);
+    alert('✅ 解鎖成功！');
+  } catch (err) { console.error(err); alert('❌ 處理失敗：\n' + err.message); }
+  finally { loadingEl.classList.remove('show'); }
+};
+$('fileInputDecrypt').addEventListener('change', handleDecrypt);
+
+let dragCounter = 0; const overlay = $('dragOverlay');
+window.addEventListener('dragenter', e => { e.preventDefault(); dragCounter++; if (e.dataTransfer.types.includes('Files')) overlay.classList.add('active'); });
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('dragleave', e => { e.preventDefault(); dragCounter--; if (dragCounter === 0) overlay.classList.remove('active'); });
+window.addEventListener('drop', e => {
+  e.preventDefault(); dragCounter = 0; overlay.classList.remove('active');
+  if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files, 'yamaha');
+});
+
+/* ================= 載入 PDF ================= */
+async function loadPdf(file, mode = 'yamaha') {
+  const loadingEl = $('loading');
+  loadingEl.classList.add('show');
+  emptyState.style.display = 'none';
+  
+  try {
+    const buf = await file.arrayBuffer();
+    let pdf;
+    try { pdf = await pdfjsLib.getDocument({ data: buf, password: '' }).promise; }
+    catch (e) {
+      if (e.name === 'PasswordException') {
+        const pwd = prompt('此 PDF 需要密碼，請輸入：');
+        if (pwd === null) throw new Error('使用者取消輸入密碼。');
+        pdf = await pdfjsLib.getDocument({ data: buf, password: pwd }).promise;
+      } else throw e;
+    }
+    
+    currentPdfDoc = pdf;
+    renderedPages.clear();
+    
+    loadingEl.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+        <div>快速解析資料中，請稍候…</div>
+        <div id="progressText" style="font-size:14px;color:#64748b;font-weight:normal;">0 / ${pdf.numPages}</div>
+        <div style="width: 240px; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
+          <div id="progressBar" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.1s;"></div>
+        </div>
+      </div>`;
+      
+    for (let i = 1; i <= pdf.numPages; i++) {
+      $('progressText').textContent = `解析進度：${i} / ${pdf.numPages}`;
+      $('progressBar').style.width = `${(i / pdf.numPages) * 100}%`;
+      
+      const page = await pdf.getPage(i);
+      const vpPDF = page.getViewport({ scale: RENDER_SCALE, rotation: 0 });
+      const tc = await page.getTextContent();
+      
+      const pageIndex = i - 1;
+      const parsed = parsePageData(tc.items, pageIndex, mode);         
+      
+      pagePartKeys.set(pageIndex, parsed.keys);
+      pageTitles.set(pageIndex, parsed.title);
+
+      const pageDiv = document.createElement('div');
+      pageDiv.className = 'page-container placeholder';
+      pageDiv.dataset.pageIndex = pageIndex;
+      pageDiv.style.width = vpPDF.width + 'px'; 
+      pageDiv.style.height = vpPDF.height + 'px';
+      pageDiv.innerHTML = '<div>載入中...</div>';
+      container.appendChild(pageDiv);
+      
+      await new Promise(r => setTimeout(r, 0));
+    }
+    
+    rebuildAssemblyOptions();
+    currentSelectValue = "0";
+    updateCustomSelectUI(0);
+    renderPartList('page', 0, true);
+    
+    await renderPagesInRange(0);
+    
+    setTimeout(fitWidth, 100);
+    
+  } catch (err) {
+    console.error(err); alert('讀取 PDF 失敗：' + err.message);
+    container.innerHTML = ''; emptyState.style.display = 'block';
+  } finally { loadingEl.classList.remove('show'); }
+}
+
+/* ================= 解析邏輯 (完全獨立模式) ================= */
+function parsePageData(items, pageIndex, mode = 'yamaha') {
+  if (!items || !items.length) return { keys: [], title: `第 ${pageIndex + 1} 頁` };
+  
+  const linesMap = {};
+  items.forEach(item => {
+    if (!item.str.trim()) return;
+    const y = Math.round(item.transform[5]);
+    const yTolerance = mode === 'yamaha' ? 12 : 8; 
+    let k = Object.keys(linesMap).find(k => Math.abs(k - y) <= yTolerance);
+    if (!k) { k = y; linesMap[k] = []; }
+    linesMap[k].push(item);
+  });
+  
+  let sortedLines = Object.keys(linesMap).map(y => ({ y: parseInt(y, 10), items: linesMap[y] })).sort((a, b) => b.y - a.y);
+
+  let pageCategory = '';
+  
+  for (let i = 0; i < sortedLines.length; i++) {
+    const lineItems = sortedLines[i].items;
+    const lineText = lineItems.map(x => x.str).join(' ').trim();
+    
+    const figMatch = lineText.match(/(FIG\.\s*\d+\s*[\u4e00-\u9fa5A-Za-z0-9\s]+)/i);
+    if (figMatch && figMatch[1].length < 30) { pageCategory = figMatch[1].trim(); break; }
+
+    if (/This page covers/i.test(lineText)) {
+       const m = lineText.match(/This page covers:?\s*(.+)/i);
+       if (m && m[1].trim().length > 0 && !/GROUP|Ref|Part No|:/i.test(m[1])) { pageCategory = m[1].trim(); break; }
+       let nextLine = sortedLines[i+1];
+       if (nextLine) {
+           let rawTitle = nextLine.items.map(x => x.str).join(' ').replace(/\s+/g, ' ');
+           rawTitle = rawTitle.replace(/([A-Za-z])\s+(?=[a-z])/g, '$1');
+           if (rawTitle.length > 0 && !/GROUP|Ref|Part No|:/i.test(rawTitle)) { pageCategory = rawTitle; break; }
+       }
+    }
+  }
+
+  let lastItemNo = '', lastPartName = '';
+  const pageKeys = [];
+
+  sortedLines.forEach(line => {
+    line.items.sort((a, b) => a.transform[4] - b.transform[4]);
+    let rawLineText = line.items.map(i => i.str).join(' ').trim();
+    if (/Page covers|GROUP NO|This catalog|Engine-|Kawasaki|หมายเลขอะไหล่|ชื่ออะไหล่|Description|部品|名稱|名称|項次|DR\d+|備註|番號|Deskripsi|No\.\s*Part|No\.\s*Ref|Jumlah|Kode Parts|Nama part|No\. Part/i.test(rawLineText)) return;
+
+    if (mode === 'yamaha') {
+      let fullStr = '', charToX = [];
+      for (let i = 0; i < line.items.length; i++) {
+        const item = line.items[i];
+        if (i > 0) {
+          const prevRight = line.items[i-1].transform[4] + (line.items[i-1].width || (line.items[i-1].str.length * 5));
+          if (item.transform[4] - prevRight > 5) { fullStr += ' '; charToX.push(item.transform[4]); }
+        }
+        fullStr += item.str;
+        const w = item.width || (item.str.length * 5);
+        for (let c = 0; c < item.str.length; c++) charToX.push(item.transform[4] + (c * (w / item.str.length)));
+      }
+      
+      let cleanStr = fullStr.replace(/[－–—]/g, '-');
+      const regex = new RegExp(YAMAHA_PART_REGEX.source, 'gi');
+      let match, matches = [];
+      while ((match = regex.exec(cleanStr)) !== null) matches.push({ partNo: normalizePartNo(match[0]), start: match.index, end: match.index + match[0].length });
+      
+      if (matches.length > 0) {
+        for (let pIdx = 0; pIdx < matches.length; pIdx++) {
+          const part = matches[pIdx];
+          const partX = charToX[part.start] !== undefined ? charToX[part.start] : 0;
+          
+          let detectedItemNo = '';
+          for (let i = 0; i < line.items.length; i++) {
+            const item = line.items[i];
+            if (item.transform[4] >= partX - 5) break; 
+            const str = item.str.trim();
+            if (/^\d{1,3}$/.test(str)) detectedItemNo = str;
+          }
+          if (detectedItemNo) lastItemNo = detectedItemNo;
+          else detectedItemNo = lastItemNo;
+
+          let nextPartX = Infinity;
+          if (pIdx + 1 < matches.length) nextPartX = charToX[matches[pIdx+1].start];
+          
+          let regionItems = [];
+          for (let i = 0; i < line.items.length; i++) {
+            const item = line.items[i];
+            if (item.transform[4] > partX - 5 && item.transform[4] < nextPartX - 5) {
+              const str = item.str.trim();
+              if (!/用於|黑|白|灰|紅|山葉黑/.test(str) && !/^[\(\)\[\]\{\}\s\-\.]+$/.test(str)) regionItems.push(item);
+            }
+          }
+          
+          let qty = 1, qtyItemIdx = -1;
+          for (let i = regionItems.length - 1; i >= 0; i--) {
+            if (/^\d{1,3}$/.test(regionItems[i].str.trim())) { qty = parseInt(regionItems[i].str.trim(), 10); qtyItemIdx = i; break; }
+          }
+          if (qtyItemIdx === -1 && regionItems.length > 0) {
+            const lastItem = regionItems[regionItems.length - 1];
+            const trailingNum = lastItem.str.match(/(\d+)\s*$/);
+            if (trailingNum) { qty = parseInt(trailingNum[1], 10); lastItem.str = lastItem.str.replace(/(\d+)\s*$/, '').trim(); }
+          }
+          
+          let nameItems = [];
+          for (let i = 0; i < regionItems.length; i++) {
+            if (i === qtyItemIdx) continue;
+            const str = regionItems[i].str.trim();
+            if (str.length > 0 && !str.includes(part.partNo) && !part.partNo.includes(str)) nameItems.push(str);
+          }
+          let lastPartName = translateText(nameItems.join(' ').replace(/\s+/g, ' ').trim());
+          
+          if (!partInfoMap.has(part.partNo)) partInfoMap.set(part.partNo, { name: lastPartName || '（無名稱）', rawName: lastPartName, qty: qty || 1, category: pageCategory || '未分類', itemNo: detectedItemNo });
+          
+          pageKeys.push({ key: part.partNo, name: lastPartName || '（無名稱）', qty: qty || 1, category: pageCategory || '未分類', itemNo: detectedItemNo });
+        }
+      }
+      return; 
+    }
+
+    let cleanLineText = rawLineText.replace(/[－–—]/g, '-').replace(/\s*-\s*/g, '-').replace(/\s+/g, ' ');
+    let partNo = null, detectedItemNo = '', qty = 1;
+
+    if (mode === 'kawasaki') {
+      const partMatch = cleanLineText.match(/\b(\d{5}-[A-Z0-9]{4,5}(?:-[A-Z0-9]{2,4})?)\b/i);
+      if (partMatch) {
+        partNo = normalizePartNo(partMatch[0]);
+        const beforePart = cleanLineText.substring(0, partMatch.index).trim();
+        const refMatch = beforePart.match(/(\d{5}[A-Z]?)$/i);
+        if (refMatch) detectedItemNo = refMatch[1];
+        let afterPart = cleanLineText.substring(partMatch.index + partMatch[0].length).trim();
+        const qtyMatch = afterPart.match(/\b(\d{1,3})\b(?=[^\d]*$)/);
+        if (qtyMatch) { qty = parseInt(qtyMatch[1], 10); afterPart = afterPart.replace(/\b\d{1,3}\b(?=[^\d]*$)/, '').trim(); }
+        const thaiIndex = afterPart.search(/[\u0E00-\u0E7F\u4e00-\u9fa5]/);
+        let nameSection = thaiIndex > 0 ? afterPart.substring(0, thaiIndex).trim() : afterPart;
+        nameSection = nameSection.replace(/^[\s,\.\-]+|[\s,\.\-]+$/g, '');
+        if (nameSection) lastPartName = translateText(nameSection);
+      }
+    } else {
+      const match = cleanLineText.match(HONDA_PART_REGEX);
+      if (match) {
+        partNo = parsePartNo(match[0], mode).partNo;
+        const partIdx = cleanLineText.indexOf(match[0]);
+        const beforePart = cleanLineText.substring(0, partIdx).trim();
+        const itemMatch = beforePart.match(/(\d{1,3})$/);
+        if (itemMatch) detectedItemNo = itemMatch[1];
+        const afterPart = cleanLineText.substring(partIdx + match[0].length).trim();
+        const nums = afterPart.match(/(?:^|\s)(\d{1,3})(?:\s|$)/g);
+        if (nums && nums.length > 0) qty = parseInt(nums[nums.length - 1].trim(), 10);
+        let nameTokens = afterPart.split(/\s+/).filter(t => !/^\d+$/.test(t) && !/^[\(\)\[\]\{\}\s\-\.]+$/.test(t));
+        if (nameTokens.length > 0) lastPartName = translateText(nameTokens.join(' '));
+      }
+    }
+
+    if (!partNo) return;
+    if (detectedItemNo) lastItemNo = detectedItemNo;
+    else detectedItemNo = lastItemNo;
+    const key = normalizePartNo(partNo);
+    if (!partInfoMap.has(key)) partInfoMap.set(key, { name: lastPartName || '（無名稱）', rawName: lastPartName, qty: qty || 1, category: pageCategory || '未分類', itemNo: detectedItemNo });
+    if (!pageKeys.includes(key)) pageKeys.push(key);
+  });
+  
+  let finalTitle = `第 ${pageIndex + 1} 頁`;
+  if (pageCategory) finalTitle = `第 ${pageIndex + 1} 頁，${translateText(pageCategory)}`;
+  return { keys: pageKeys, title: finalTitle };   
+}
+
+/* ================= 圖面熱點與直接加入 ================= */
+function bindPartEvent(el, key) {
+  const info = partInfoMap.get(key);
+  if (!info) return;
+  el.title = `點擊加入：${key}\n品名：${info.name}\n數量：${info.qty}`;
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    addToPickList(key); 
+    el.style.setProperty('background', 'rgba(76, 175, 80, 0.9)', 'important');
+    el.style.setProperty('box-shadow', '0 0 0 3px rgba(76, 175, 80, 0.45)', 'important');
+    setTimeout(() => {
+      el.style.removeProperty('background');
+      el.style.removeProperty('box-shadow');
+    }, 300);
+  });
+}
+
+function highlightPartNumbers(layerDiv, mode = 'yamaha') {
+  const spans = Array.from(layerDiv.querySelectorAll('span'));
+  if (!spans.length) return;
+  let fullText = '', charToSpanMap = [], lastTop = -1, lastRight = -1;
+
+  spans.forEach((span, idx) => {
+    let text = span.textContent;
+    if (!text) return;
+    let normText = text.replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).replace(/[－–—]/g, '-');
+    const top = parseFloat(span.style.top) || 0, left = parseFloat(span.style.left) || 0;
+    const width = parseFloat(span.style.width) || (text.length * 5);
+    
+    if (lastTop !== -1 && (Math.abs(top - lastTop) > 10 || left > lastRight + 50)) { fullText += ' '; charToSpanMap.push(-1); }
+    fullText += normText;
+    for (let i = 0; i < normText.length; i++) charToSpanMap.push(idx);
+    lastTop = top; lastRight = left + width;
+  });
+
+  let regexSource = HONDA_PART_REGEX.source;
+  if (mode === 'kawasaki') regexSource = KAWASAKI_PART_REGEX.source;
+  else if (mode === 'yamaha') regexSource = YAMAHA_PART_REGEX.source;
+
+  const regex = new RegExp(regexSource, 'gi');
+  let match;
+  while ((match = regex.exec(fullText)) !== null) {
+    const rawMatched = match[0];
+    const cleanMatched = rawMatched.replace(/\s*-\s*/g, '-').replace(/\s+/g, '');
+    
+    const start = match.index, end = start + rawMatched.length - 1;
+    const idxSet = new Set();
+    for (let i = start; i <= end; i++) {
+      if (charToSpanMap[i] !== undefined && charToSpanMap[i] !== -1) idxSet.add(charToSpanMap[i]);
+    }
+    if (idxSet.size > 10) { if (match[0].length === 0) regex.lastIndex++; continue; }
+
+    const key = normalizePartNo(cleanMatched);
+    const info = partInfoMap.get(key) || { name: '（無名稱）', qty: 1, category: '未分類', itemNo: '' };
+    if (!partInfoMap.has(key)) partInfoMap.set(key, info);
+
+    idxSet.forEach(idx => {
+      const span = spans[idx];
+      if (span.dataset.highlighted) return;
+      if (span.querySelector('.part-hit-inner')) { span.dataset.highlighted = 'true'; return; }
+
+      const trimmed = span.textContent.trim();
+      if (!trimmed) return;
+      const normSpan = normalizeText(span.textContent);
+
+      if (normSpan === cleanMatched) {
+        span.innerHTML = `<span class="part-hit-inner">${span.textContent}</span>`;
+        span.dataset.highlighted = 'true'; span.dataset.partKey = key;
+        const inner = span.querySelector('.part-hit-inner');
+        if (inner) { inner.dataset.partKey = key; bindPartEvent(inner, key); }
+      } else if (normSpan.includes(cleanMatched) && !span.children.length) {
+        const parts = cleanMatched.split('-');
+        const m = span.textContent.match(new RegExp(parts.join('[\\s－–—]*'), 'i'));
+        if (m) {
+          span.innerHTML = span.textContent.replace(m[0], `<span class="part-hit-inner">${m[0]}</span>`);
+          const inner = span.querySelector('.part-hit-inner');
+          if (inner) { inner.dataset.partKey = key; bindPartEvent(inner, key); }
+        } else {
+          span.innerHTML = `<span class="part-hit-inner">${span.textContent}</span>`;
+          const inner = span.querySelector('.part-hit-inner');
+          if (inner) { inner.dataset.partKey = key; bindPartEvent(inner, key); }
+        }
+        span.dataset.highlighted = 'true';
+      } else {
+        span.innerHTML = `<span class="part-hit-inner">${span.textContent}</span>`;
+        span.dataset.highlighted = 'true'; span.dataset.partKey = key;
+        const inner = span.querySelector('.part-hit-inner');
+        if (inner) { inner.dataset.partKey = key; bindPartEvent(inner, key); }
+      }
+    });
+    if (match[0].length === 0) regex.lastIndex++;
+  }
+}
+
+/* ================= 頁面選擇器與跳頁 ================= */
+function rebuildAssemblyOptions() {
+  const optionsBox = $('customOptions');
+  let html = `<div class="custom-option" data-val="all">⭐ 顯示所有零件</div>`;
+  for (let i = 0; i < pageTitles.size; i++) {
+    html += `<div class="custom-option" data-val="${i}">${esc(pageTitles.get(i))}</div>`;
+  }
+  optionsBox.innerHTML = html;
+
+  optionsBox.querySelectorAll('.custom-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      const val = opt.getAttribute('data-val');
+      currentSelectValue = val;
+      $('customOptions').classList.remove('open');
+      updateCustomSelectUI(val);
+
+      if (val === 'all') {
+        renderPartList('all', 0, true);
+      } else {
+        const idx = parseInt(val, 10);
+        if (!isNaN(idx)) {
+          currentPageIndex = idx;
+          renderPartList('page', idx, true);
+          scrollToPage(idx);
+        }
+      }
+    });
+  });
+}
+
+function updateCustomSelectUI(val) {
+  const trigger = $('customSelectTrigger');
+  if (val === 'all') trigger.textContent = '⭐ 顯示所有零件';
+  else {
+    const idx = parseInt(val, 10);
+    trigger.textContent = pageTitles.get(idx) || `第 ${idx + 1} 頁`;
+  }
+  document.querySelectorAll('.custom-option').forEach(opt => opt.classList.toggle('selected', opt.getAttribute('data-val') === val));
+}
+
+$('customSelectTrigger').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const optsContainer = $('customOptions');
+  const trigger = $('customSelectTrigger');
+  const isOpen = optsContainer.classList.toggle('open');
+  
+  if (isOpen) {
+    const rect = trigger.getBoundingClientRect();
+    optsContainer.style.top = (rect.bottom + 4) + 'px';
+    optsContainer.style.left = rect.left + 'px';
+    optsContainer.style.width = rect.width + 'px';
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const selectedOpt = optsContainer.querySelector('.custom-option.selected');
+        if (selectedOpt) optsContainer.scrollTop = Math.max(0, selectedOpt.offsetTop - (optsContainer.clientHeight / 2) + (selectedOpt.clientHeight / 2));
+      });
+    });
+  }
+});
+
+document.addEventListener('click', () => $('customOptions').classList.remove('open'));
+
+function scrollToPage(pageIndex) {
+  const pageDiv = container.querySelector(`.page-container[data-page-index="${pageIndex}"]`);
+  if (pageDiv) {
+    isScrollingProgrammatically = true;
+    const ratio = scale / RENDER_SCALE;
+    const targetTop = pageDiv.offsetTop * ratio;
+    
+    viewport.scrollTo({ top: targetTop - 20, behavior: 'smooth' });
+    
+    // 🎯 立即觸發渲染，不要等滾動事件
+    renderPagesInRange(pageIndex);
+
+    pageDiv.style.transition = 'box-shadow .3s';
+    pageDiv.style.boxShadow = '0 0 0 3px #fbbf24, 0 4px 16px rgba(251,191,36,0.55)';
+    
+    setTimeout(() => { pageDiv.style.boxShadow = ''; isScrollingProgrammatically = false; }, 800);
+  }
+}
+
+$('btnPrevPage').addEventListener('click', () => {
+  const options = Array.from(document.querySelectorAll('.custom-option'));
+  const currIdx = options.findIndex(o => o.getAttribute('data-val') === currentSelectValue);
+  if (currIdx > 0) options[currIdx - 1].click();
+});
+
+$('btnNextPage').addEventListener('click', () => {
+  const options = Array.from(document.querySelectorAll('.custom-option'));
+  const currIdx = options.findIndex(o => o.getAttribute('data-val') === currentSelectValue);
+  if (currIdx < options.length - 1) options[currIdx + 1].click();
+});
+
+/* ================= 零件清單渲染 ================= */
+function renderPartList(mode = 'page', pageIdx = 0, scrollToTop = false) {
+  const box = $('partList');
+  let keys = [];
+  const q = $('partSearch').value.trim().toUpperCase();
+  
+  if (q) {
+    keys = [...partInfoMap.keys()].filter(k => {
+        const info = partInfoMap.get(k);
+        if (!info) return false;
+        const name = info.name ? String(info.name).toUpperCase() : '';
+        const rawName = info.rawName ? String(info.rawName).toUpperCase() : '';
+        return String(k).toUpperCase().includes(q) || name.includes(q) || rawName.includes(q);
+    });
+  } else {
+    if (mode === 'all') keys = [...partInfoMap.keys()];
+    else keys = pagePartKeys.get(pageIdx) || [];
+  }
+
+  $('listCount').textContent = keys.length;
+  
+  if (!keys.length) {
+    box.innerHTML = `<p style="color:var(--muted);font-size:13px;text-align:center;padding:30px 14px;">無零件資料。</p>`;
+    if (scrollToTop) box.scrollTop = 0;
+    return;
+  }
+
+  let html = '';
+  keys.forEach(itemOrKey => {
+    let key = typeof itemOrKey === 'string' ? itemOrKey : itemOrKey.key;
+    let info = typeof itemOrKey === 'string' ? partInfoMap.get(key) : itemOrKey;
+    if (!info) return; 
+
+    const pickData = pickList.get(key);
+    const inPick = pickData !== undefined;
+    const btnText = inPick ? `✓ 已加入 (${pickData.qty})` : '＋ PickList';
+    const btnClass = inPick ? 'add-btn added' : 'add-btn';
+    const sel = key === selectedKey ? ' selected' : '';
+    const itemPrefix = info.itemNo ? `<span style="color:#94a3b8;font-size:12px;margin-right:6px;">[${esc(info.itemNo)}]</span>` : '';
+    
+    html += `<div class="part-row${sel}" data-key="${esc(key)}">
+      <span class="pno">${esc(key)}</span>
+      <span class="pname">${itemPrefix}${esc(info.name)}</span>
+      <span class="pmeta"><span class="qty">×${info.qty}</span><br>${esc(info.category)}</span>
+      <button class="${btnClass}" data-add="${esc(key)}">${btnText}</button>
+    </div>`;
+  });
+  box.innerHTML = html;
+  if (scrollToTop) box.scrollTop = 0;
+
+  box.querySelectorAll('.part-row').forEach(row => {
+    row.addEventListener('click', e => {
+      if (e.target.closest('.add-btn')) return;
+      selectedKey = row.dataset.key;
+      renderPartList(mode, pageIdx);
+    });
+  });
+  box.querySelectorAll('.add-btn').forEach(btn => {
+    btn.addEventListener('click', e => { e.stopPropagation(); addToPickList(btn.dataset.add); });
+  });
+}
+
+$('partSearch').addEventListener('input', () => renderPartList(currentSelectValue === 'all' ? 'all' : 'page', currentPageIndex));
+
+/* ================= PickList ================= */
+function addToPickList(key) {
+  const info = partInfoMap.get(key);
+  if (!info) return;
+  if (pickList.has(key)) pickList.get(key).qty += info.qty;
+  else pickList.set(key, { name: info.name, qty: info.qty, category: info.category, itemNo: info.itemNo });
+  renderPickList(); 
+}
+
+function setPickQty(key, qty) {
+  if (qty <= 0) pickList.delete(key);
+  else pickList.get(key).qty = qty;
+  renderPickList();
+}
+
+function updatePartButtons() {
+  document.querySelectorAll('.add-btn').forEach(btn => {
+    const key = btn.dataset.add;
+    const pickData = pickList.get(key);
+    if (pickData) { btn.textContent = `✓ 已加入 (${pickData.qty})`; btn.classList.add('added'); }
+    else { btn.textContent = '＋ PickList'; btn.classList.remove('added'); }
+  });
+}
+
+function renderPickList() {
+  const box = $('pickListBox');
+  $('pickCount').textContent = pickList.size;
+  $('btnClearPick').disabled = pickList.size === 0;
+
+  if (!pickList.size) {
+    box.innerHTML = '<div class="pick-empty"><strong>PickList 是空的</strong>從「零件清單」或圖面點擊加入</div>';
+    $('pickSummary').textContent = ''; updatePartButtons(); return;
+  }
+  let html = '', totalQty = 0;
+  for (const [key, data] of pickList) {
+    totalQty += data.qty;
+    const itemPrefix = data.itemNo ? `<span style="color:#94a3b8;font-size:12px;margin-right:6px;">[${esc(data.itemNo)}]</span>` : '';
+    html += `<div class="pick-item">
+      <div class="pick-item-top">
+        <div>
+          <div class="pk-no">${esc(key)}</div>
+          <div class="pk-name">${itemPrefix}${esc(data.name)}</div>
+          <span class="pk-cat">${esc(data.category)}</span>
+        </div>
+        <button class="del-pk" data-del-pk="${esc(key)}" title="移除">✕</button>
+      </div>
+      <div class="pick-item-bottom">
+        <div class="pick-qty">
+          <button data-pk-dec="${esc(key)}">−</button>
+          <input type="number" min="1" value="${data.qty}" data-pk-input="${esc(key)}">
+          <button data-pk-inc="${esc(key)}">+</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  box.innerHTML = html;
+  $('pickSummary').textContent = `共 ${pickList.size} 種零件，合計 ${totalQty} 件`;
+
+  box.querySelectorAll('[data-del-pk]').forEach(b => b.onclick = () => setPickQty(b.dataset.delPk, 0));
+  box.querySelectorAll('[data-pk-dec]').forEach(b => b.onclick = () => setPickQty(b.dataset.pkDec, pickList.get(b.dataset.pkDec).qty - 1));
+  box.querySelectorAll('[data-pk-inc]').forEach(b => b.onclick = () => setPickQty(b.dataset.pkInc, pickList.get(b.dataset.pkInc).qty + 1));
+  box.querySelectorAll('[data-pk-input]').forEach(inp => {
+    inp.addEventListener('change', () => { let v = parseInt(inp.value, 10); if (isNaN(v) || v < 1) v = 1; setPickQty(inp.dataset.pkInput, v); });
+  });
+  updatePartButtons(); 
+}
+
+$('btnClearPick').addEventListener('click', () => {
+  if (!pickList.size) return;
+  if (!confirm(`確定清空 PickList？（共 ${pickList.size} 種零件）`)) return;
+  pickList.clear(); renderPickList();
+});
+
+/* ================= 分頁切換 ================= */
+function switchView(name) {
+  document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.toggle('active', t.dataset.view === name));
+  document.querySelectorAll('.panel-view').forEach(v => v.classList.toggle('active', v.id === 'view' + name.charAt(0).toUpperCase() + name.slice(1)));
+}
+document.querySelectorAll('.sidebar-tab').forEach(tab => {
+  tab.addEventListener('click', () => switchView(tab.dataset.view));
+});
+
+/* ================= 匯出 Modal ================= */
+const modal = $('modal');
+$('btnExportPick').addEventListener('click', () => {
+  if (!pickList.size) { alert('PickList 是空的。'); return; }
+  modal.classList.add('open'); buildModalContent();
+});
+$('btnClose').addEventListener('click', () => modal.classList.remove('open'));
+modal.addEventListener('mousedown', e => { if (e.target === modal) modal.classList.remove('open'); });
+
+function buildModalContent() {
+  let totalQty = 0, rows = '';
+  for (const [key, d] of pickList) { totalQty += d.qty; rows += `<tr><td>${esc(key)}</td><td>${esc(d.name)}</td><td>${d.qty}</td></tr>`; }
+  $('modalBody').innerHTML = `
+    <table class="modal-table">
+      <thead><tr><th>零件號碼</th><th>產品名稱</th><th>數量</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><th colspan="2" style="border:none;padding-top:10px;">合計 ${pickList.size} 種</th><th style="border:none;padding-top:10px;">${totalQty} 件</th></tr></tfoot>
+    </table>
+    <p style="color:#7b8794;font-size:12px;margin-top:12px;">建立時間：${new Date().toLocaleString()}</p>`;
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;'; document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch {} document.body.removeChild(ta); return ok; }
+}
+$('btnCopy').addEventListener('click', async () => {
+  let t = '零件號碼\t產品名稱\t數量\n';
+  for (const [k, d] of pickList) t += `${k}\t${d.name}\t${d.qty}\n`;
+  const ok = await copyText(t), btn = $('btnCopy'), orig = btn.innerHTML;
+  btn.innerHTML = ok ? '✅ 已複製' : '❌ 複製失敗';
+  setTimeout(() => btn.innerHTML = orig, 2000);
+});
+$('btnPrint').addEventListener('click', () => window.print());
+$('btnExcel').addEventListener('click', () => {
+  const csvEsc = v => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  let csv = '零件號碼,產品名稱,數量\n', total = 0;
+  for (const [k, d] of pickList) { total += d.qty; csv += [k, d.name, d.qty].map(csvEsc).join(',') + '\n'; }
+  csv += `,合計,${total}\n`;
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `PickList_${getTimestamp()}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+});
+
+/* ================= 初始化 ================= */
+renderPartList('page', 0, true);
+renderPickList();
+updateRamUsage(); // 初始先跑一次狀態更新
+</script>
+</body>
+</html>
