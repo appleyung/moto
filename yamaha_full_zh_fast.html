@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>零件圖 PDF → EPC 模式 (EPC_V20_29 - 狀態列回頂第1頁)</title>
+<title>零件圖 PDF → EPC 模式 (EPC_V20_42 - 搜尋完整號與高亮不閃)</title>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
@@ -33,20 +33,50 @@
   header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
   header .sub{color:#a9cce3;margin:0;font-size:11px;margin-left:12px;}
 
+
+  /* V20.30：PDF 區以外禁止雙擊／手勢網頁縮放 */
+  html, body {
+    touch-action: manipulation;
+    -ms-content-zooming: none;
+    overscroll-behavior: none;
+  }
+  .epc-toolbar, .sidebar, header, .modal, .nav-btn, .custom-select-wrapper {
+    touch-action: manipulation;
+  }
+  /* PDF 瀏覽區允許平移；縮放由自訂雙指邏輯處理 */
+  .pdf-viewport, .pdf-viewport-wrapper {
+    touch-action: pan-x pan-y;
+  }
+
   .layout { display: flex; flex: 1; overflow: hidden; height: 100%; min-height: 0; position: relative;}
 
   .left-pane {
-    flex: 1; display: flex; flex-direction: column; overflow: hidden;
-    min-width: 0; min-height: 0;
+    flex: 1;
+    display: flex !important;
+    flex-direction: column !important;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
   }
 
-  /* V20.25：工具列固定在 PDF 顯示區之外，不佔用／不覆蓋 pdf-viewport */
+  /* V20.34：工具列在 PDF 區外上方，強制可見（避免被系統列／安全區蓋住） */
   .epc-toolbar {
-    display: flex; align-items: center; justify-content: space-between; gap: 6px;
-    padding: 6px 8px; background: #fff; border-bottom: 1px solid var(--line);
-    flex: 0 0 auto; flex-wrap: nowrap;
-    position: relative; z-index: 20;
-    box-shadow: 0 1px 0 rgba(0,0,0,0.04);
+    display: flex !important;
+    visibility: visible !important;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    padding: 6px 8px;
+    background: #fff !important;
+    border-bottom: 1px solid var(--line);
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
+    flex-wrap: nowrap;
+    position: relative;
+    z-index: 50;
+    min-height: 44px;
+    width: 100%;
+    box-sizing: border-box;
   }
   
   .search-group {
@@ -60,28 +90,51 @@
 
   /* 🎯 記憶體/快取監控指示器 */
   .ram-indicator {
-    font-size: 11px;
+    font-size: 10px;
     color: var(--muted);
     white-space: nowrap;
-    padding: 0 2px;
+    padding: 0 1px;
     font-family: monospace;
     flex: none;
+    max-width: 72px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
+  .btn-to-top {
+    flex: none;
+    width: 30px; height: 30px;
+    border-radius: 6px;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    color: var(--epc-blue);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+  }
+  .btn-to-top:hover { background: #e2e8f0; }
+  .btn-to-top:active { background: #dbeafe; }
 
   /* 🎯 縮小後的縮放控制項 */
   .pdf-controls {
-    display: flex; align-items: center; gap: 0px; flex: none;
-    background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; height: 26px; padding: 0 1px;
+    display: flex; align-items: center; gap: 0; flex: none;
+    background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; height: 26px; padding: 0;
+    max-width: 64px;
   }
   .pdf-controls button {
-    background: transparent; border: none; color: var(--epc-blue); font-size: 13px; 
-    width: 20px; height: 20px; display: grid; place-items: center; cursor: pointer; border-radius: 4px;
+    background: transparent; border: none; color: var(--epc-blue); font-size: 12px;
+    width: 16px; height: 20px; display: grid; place-items: center; cursor: pointer; border-radius: 4px;
+    padding: 0;
   }
   .pdf-controls button:hover { background: #e2e8f0; }
-  .pdf-controls .zoom-input-group { display: flex; align-items: center; margin: 0 1px; }
-  .pdf-controls input { width: 24px; background: transparent; border: none; color: var(--text); font-size: 10px; font-weight: 600; text-align: right; padding: 0; -moz-appearance: textfield; }
+  .pdf-controls .zoom-input-group { display: flex; align-items: center; margin: 0; }
+  .pdf-controls input { width: 20px; background: transparent; border: none; color: var(--text); font-size: 9px; font-weight: 600; text-align: center; padding: 0; -moz-appearance: textfield; }
   .pdf-controls input::-webkit-outer-spin-button, .pdf-controls input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-  .pdf-controls span { font-size: 10px; font-weight: 600; margin-left: 0px; }
+  .pdf-controls span { font-size: 9px; font-weight: 600; margin-left: 0; }
   
   .menu-wrapper { position: relative; flex: none; }
   .menu-toggle-btn {
@@ -105,7 +158,7 @@
   .menu-item:last-child { border-bottom: none; }
   .menu-item:hover { background: #f0f6ff; }
 
-  /* V20.25：PDF 顯示區僅佔工具列以下的剩餘空間（對應紫框） */
+  /* V20.33：PDF 顯示區只佔工具列以下空間（同 V25） */
   .pdf-viewport-wrapper {
     flex: 1 1 auto;
     position: relative;
@@ -120,7 +173,6 @@
     overflow: auto;
     padding: 12px;
     -webkit-overflow-scrolling: touch;
-    /* 確保捲動與觸控只作用在此區，不影響上方工具列 */
     touch-action: pan-x pan-y;
   }
   #emptyState { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #ddd; pointer-events: none; z-index: 5; width: 100%; padding: 0 20px; }
@@ -278,17 +330,28 @@
   
   @media (max-width: 768px) and (orientation: portrait) {
     .layout { flex-direction: column; }
-    .left-pane { 
-      flex: none; 
-      height: 55vh; 
-      border-bottom: 2px solid var(--line); 
+    .left-pane {
+      flex: none;
+      height: 55vh;
+      max-height: 55vh;
+      border-bottom: 2px solid var(--line);
+      display: flex !important;
+      flex-direction: column !important;
     }
-    .sidebar { 
-      width: 100%; 
-      max-width: none; 
-      flex: 1; 
-      min-height: 0; 
-      border-left: none; 
+    .epc-toolbar {
+      flex: 0 0 auto !important;
+      min-height: 44px;
+    }
+    .pdf-viewport-wrapper {
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+    }
+    .sidebar {
+      width: 100%;
+      max-width: none;
+      flex: 1;
+      min-height: 0;
+      border-left: none;
     }
   }
   @media (max-width: 1024px) and (orientation: landscape) {
@@ -316,7 +379,7 @@
 
 <header>
   <div style="display:flex;align-items:baseline;">
-    <h1>零件圖 PDF → EPC 模式 (V20.29)</h1>
+    <h1>零件圖 PDF → EPC 模式 (V20.42)</h1>
     <span class="sub">支援多語言解析與翻譯</span>
   </div>
 </header>
@@ -327,9 +390,18 @@
       <div class="search-group">
         <input type="search" id="partSearch" placeholder="搜尋零件號碼或名稱...">
       </div>
+
+      <!-- V20.31：置頂／回第 1 頁 -->
+      <button type="button" id="btnToTop" class="btn-to-top" title="回到第一頁" aria-label="回到第一頁">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M5 5h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M12 19V9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M7.5 12.5L12 8l4.5 4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
       
       <!-- 🎯 記憶體/快取監控指示器 -->
-      <div id="ramUsage" class="ram-indicator" title="當前網頁 Canvas 佔用容量">快取: 0.0 MB</div>
+      <div id="ramUsage" class="ram-indicator" title="當前網頁 Canvas 佔用容量">快取:0M</div>
 
       <!-- 🎯 縮小後的縮放控制項 -->
       <div class="pdf-controls">
@@ -469,25 +541,45 @@ function getTimestamp() {
   return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-/* ================= 記憶體/快取監控 (計算 Canvas 體積) ================= */
+/* ================= 記憶體/快取監控（V20.36：Canvas + 網站粗估，向上進位） ================= */
 function updateRamUsage() {
   const ramEl = $('ramUsage');
   if (!ramEl) return;
-  
-  let totalBytes = 0;
-  renderedPages.forEach(idx => {
-    const pageDiv = container.querySelector(`.page-container[data-page-index="${idx}"]`);
-    const canvas = pageDiv ? pageDiv.querySelector('canvas') : null;
-    if (canvas) {
-      // 每個像素佔用 4 bytes (RGBA)
-      totalBytes += canvas.width * canvas.height * 4; 
-    }
-  });
-  
-  const totalMB = (totalBytes / (1024 * 1024)).toFixed(1);
-  ramEl.textContent = `快取: ${totalMB} MB`;
+
+  // 1) Canvas 實際像素（先前較準的方法）
+  let canvasBytes = 0;
+  if (renderedPages && container) {
+    renderedPages.forEach(idx => {
+      const pageDiv = container.querySelector(`.page-container[data-page-index="${idx}"]`);
+      const canvas = pageDiv ? pageDiv.querySelector('canvas') : null;
+      if (canvas) canvasBytes += canvas.width * canvas.height * 4; // RGBA
+      // highlight canvas 一併計入
+      const hl = pageDiv ? pageDiv.querySelector('canvas.highlight-layer') : null;
+      if (hl) canvasBytes += hl.width * hl.height * 4;
+    });
+  }
+
+  // 2) 網站本身粗估（DOM／腳本／PDF.js／資料結構等，固定底噪 + 隨資料量微增）
+  const BASE_SITE_BYTES = 0.8 * 1024 * 1024; // 開啟頁面基本占用 ~0.8MB
+  const partCount = (typeof partInfoMap !== 'undefined' && partInfoMap) ? partInfoMap.size : 0;
+  const pickCount = (typeof pickList !== 'undefined' && pickList) ? pickList.size : 0;
+  const pageShells = container ? container.querySelectorAll('.page-container').length : 0;
+  const textSpans = container ? container.querySelectorAll('.textLayer span').length : 0;
+  const overheadBytes =
+    BASE_SITE_BYTES +
+    pageShells * 30 * 1024 +
+    textSpans * 100 +
+    partCount * 200 +
+    pickCount * 150;
+
+  const totalBytes = canvasBytes + overheadBytes;
+  // 向上進位成整數 MB；有占用時至少顯示 1
+  let totalMB = Math.ceil(totalBytes / (1024 * 1024));
+  if (totalBytes > 0 && totalMB < 1) totalMB = 1;
+
+  ramEl.textContent = `快取:${totalMB}M`;
+  ramEl.title = `Canvas:${(canvasBytes/1048576).toFixed(2)}MB + 網站粗估:${(overheadBytes/1048576).toFixed(2)}MB（向上進位）`;
 }
-// 啟動定時器，每 1000ms 更新一次
 setInterval(updateRamUsage, 1000);
 
 
@@ -513,7 +605,9 @@ const YAMAHA_PART_REGEX = /\b[0-9A-Z]{3,5}\s*-\s*[0-9A-Z]{2,5}(?:\s*-\s*[0-9A-Z]
 
 const partInfoMap = new Map();          
 const pagePartKeys = new Map();         
-const pageTitles = new Map();           
+const pageTitles = new Map();
+/** 部品番號索引：零件號 → { fig, item } */
+const partFigLocations = new Map();
 const pickList = new Map();             
 let selectedKey = null;                 
 let currentPageIndex = 0;
@@ -789,6 +883,10 @@ async function renderSinglePage(pageIndex) {
     const tc = await page.getTextContent();
     await pdfjsLib.renderTextLayer({ textContent: tc, container: textLayerDiv, viewport: vpPDF, textDivs: [] }).promise;
     highlightPartNumbersFromContent(pageDiv, tc, vpPDF, currentMode);
+    // 若目前有選取的零件，渲染完成後補上藍色焦點
+    if (typeof selectedKey === 'string' && selectedKey) {
+      setTimeout(() => { try { highlightPartOnPage(selectedKey); } catch (e) {} }, 30);
+    }
     updateRamUsage(); // 渲染完成後立即更新容量
     
   } catch (err) {
@@ -874,6 +972,8 @@ function goToPdfFirstPage() {
     navLockTarget = null;
   }, 400);
 }
+const btnToTop = $('btnToTop');
+if (btnToTop) btnToTop.addEventListener('click', (e) => { e.preventDefault(); goToPdfFirstPage(); });
 viewport.addEventListener('scroll', () => {
   const st = viewport.scrollTop;
   // 狀態列點擊典型：從較大 scrollTop 瞬間回到接近 0
@@ -894,6 +994,34 @@ window.addEventListener('scroll', () => {
   if (viewport.scrollTop > 120) goToPdfFirstPage();
 }, { passive: true });
 
+// 禁止瀏覽器預設縮放手勢（雙指／雙擊），但 PDF 區內的自訂雙指縮放仍可用
+document.addEventListener('gesturestart', (e) => {
+  if (!e.target.closest || !e.target.closest('#pdfViewport')) e.preventDefault();
+}, { passive: false });
+document.addEventListener('gesturechange', (e) => {
+  if (!e.target.closest || !e.target.closest('#pdfViewport')) e.preventDefault();
+}, { passive: false });
+document.addEventListener('gestureend', (e) => {
+  if (!e.target.closest || !e.target.closest('#pdfViewport')) e.preventDefault();
+}, { passive: false });
+
+// 雙擊上方工具列 → 回到第 1 頁（iOS 狀態列／動態島點擊無法被網頁直接接收時的替代）
+(function() {
+  const bar = document.querySelector('.epc-toolbar');
+  if (!bar) return;
+  let lastTap = 0;
+  bar.addEventListener('touchend', (e) => {
+    const now = Date.now();
+    if (now - lastTap < 350) {
+      e.preventDefault();
+      goToPdfFirstPage();
+      lastTap = 0;
+    } else {
+      lastTap = now;
+    }
+  }, { passive: false });
+})();
+
 // 使用者手動拖曳時才解除換頁鎖定；點按鈕換頁期間不要清掉
 viewport.addEventListener('touchstart', (e) => {
   if (navLockTarget !== null) return; // 程式換頁鎖定中
@@ -912,7 +1040,7 @@ function handleFiles(files, mode = 'yamaha') {
   if (container.firstElementChild) {
     if (!confirm('目前已有開啟的 PDF，是否關閉舊檔並載入新的？\n（零件清單與 PickList 將一併清空）')) return;
     container.innerHTML = '';
-    partInfoMap.clear(); pagePartKeys.clear(); pageTitles.clear(); pickList.clear(); selectedKey = null; currentPageIndex = 0;
+    partInfoMap.clear(); pagePartKeys.clear(); pageTitles.clear(); partFigLocations.clear(); pickList.clear(); selectedKey = null; currentPageIndex = 0;
     renderedPages.clear(); currentPdfDoc = null;
     renderPartList('page', 0); renderPickList();
     scale = 1; applyZoom(1); viewport.scrollTop = 0;
@@ -1407,8 +1535,26 @@ function parsePageData(items, pageIndex, mode = 'yamaha') {
   
   let finalTitle = `第 ${pageIndex + 1} 頁`;
   if (pageCategory) finalTitle = `第 ${pageIndex + 1} 頁，${translateText(pageCategory)}`;
-  return { keys: pageKeys, title: finalTitle };   
+
+  // V20.43：部品番號索引「零件號 + FIG-項次」例如 90269-06802  29-8 → FIG.29 第8項
+  try {
+    const joined = (items || []).map(it => String(it.str || '')).join('  ');
+    const indexRe = /([A-Z0-9]{2,}(?:-[A-Z0-9]{2,}){1,4})\s+(\d{1,3})\s*[-–—]\s*(\d{1,3})/gi;
+    let im;
+    while ((im = indexRe.exec(joined)) !== null) {
+      const pno = (typeof normalizePartNo === 'function') ? normalizePartNo(im[1]) : im[1].toUpperCase();
+      const fig = parseInt(im[2], 10);
+      const item = parseInt(im[3], 10);
+      if (!pno || isNaN(fig) || isNaN(item)) continue;
+      if (!partFigLocations.has(pno)) {
+        partFigLocations.set(pno, { fig, item, indexPage: pageIndex });
+      }
+    }
+  } catch (err) { /* ignore index parse errors */ }
+
+  return { keys: pageKeys, title: finalTitle };
 }
+
 
 /* ================= 圖面熱點與直接加入 ================= */
 function bindPartEvent(el, key) {
@@ -1603,19 +1749,251 @@ $('btnNextPage').addEventListener('click', () => {
 });
 
 /* ================= 零件清單渲染 ================= */
+// V20.43：優先用索引的 FIG.xx，其次正式零件頁，避開「索引」頁
+function isIndexPageTitle(title) {
+  return /索引|番號索引|部品番号|Number\s*Index|PART\s*INDEX/i.test(String(title || ''));
+}
+function findPageByFigNumber(figNum) {
+  if (figNum == null || !pageTitles) return null;
+  const re = new RegExp('FIG\\.?\\s*' + String(figNum) + '\\b', 'i');
+  for (const [idx, title] of pageTitles.entries()) {
+    if (re.test(String(title || ''))) return idx;
+  }
+  return null;
+}
+function findPageForPart(key) {
+  if (!key || !pagePartKeys) return null;
+  try {
+    const norm = (typeof normalizePartNo === 'function') ? normalizePartNo(key) : String(key).toUpperCase();
+
+    // 1) 索引表：29-8 → FIG.29
+    if (typeof partFigLocations !== 'undefined' && partFigLocations) {
+      const loc = partFigLocations.get(norm) || partFigLocations.get(key);
+      if (loc && loc.fig != null) {
+        const figPage = findPageByFigNumber(loc.fig);
+        if (figPage != null) return figPage;
+      }
+    }
+
+    // 2) category 含 FIG. n
+    const info = partInfoMap.get(key) || partInfoMap.get(norm);
+    if (info && info.category) {
+      const m = String(info.category).match(/FIG\.?\s*(\d+)/i);
+      if (m) {
+        const figPage = findPageByFigNumber(parseInt(m[1], 10));
+        if (figPage != null) return figPage;
+      }
+    }
+
+    // 3) pagePartKeys：非索引頁優先
+    let indexFallback = null;
+    for (const [pageIdx, list] of pagePartKeys.entries()) {
+      if (!list) continue;
+      let hit = false;
+      for (const item of list) {
+        const k = typeof item === 'string' ? item : (item && item.key);
+        if (!k) continue;
+        if (k === key || ((typeof normalizePartNo === 'function' ? normalizePartNo(k) : String(k).toUpperCase()) === norm)) {
+          hit = true; break;
+        }
+      }
+      if (!hit) continue;
+      const title = pageTitles.get(pageIdx) || '';
+      if (isIndexPageTitle(title)) {
+        if (indexFallback == null) indexFallback = pageIdx;
+        continue;
+      }
+      return pageIdx;
+    }
+    return indexFallback;
+  } catch (e) {
+    console.warn('findPageForPart', e);
+    return null;
+  }
+}
+
+function clearPartFocusHighlight() {
+  if (!container) return;
+  container.querySelectorAll('[data-part-focus="1"]').forEach(el => {
+    el.style.outline = '';
+    el.style.background = '';
+    el.style.boxShadow = '';
+    delete el.dataset.partFocus;
+  });
+}
+
+function partKeysEqual(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const na = (typeof normalizePartNo === 'function') ? normalizePartNo(a) : String(a);
+  const nb = (typeof normalizePartNo === 'function') ? normalizePartNo(b) : String(b);
+  if (na === nb) return true;
+  const ca = String(na).replace(/[-\s]/g, '').toUpperCase();
+  const cb = String(nb).replace(/[-\s]/g, '').toUpperCase();
+  return ca === cb;
+}
+
+function applyBlueFocusStyle(el) {
+  el.dataset.partFocus = '1';
+  el.style.outline = '2px solid #2563eb';
+  el.style.background = 'rgba(37, 99, 235, 0.4)';
+  el.style.boxShadow = '0 0 0 1px rgba(37, 99, 235, 0.55)';
+}
+
+// V20.40：藍色固定高亮；比對更寬；textLayer 後備；重試更久
+function highlightPartOnPage(key) {
+  if (!key || !container) return false;
+  let matched = [];
+
+  // 1) 有 data-part-key 的熱區／高亮盒
+  container.querySelectorAll('[data-part-key]').forEach(el => {
+    if (partKeysEqual(el.dataset.partKey, key)) matched.push(el);
+  });
+
+  // 2) 後備：textLayer 精確比對
+  if (!matched.length) {
+    const pageIdx = findPageForPart(key);
+    const pageDiv = pageIdx != null
+      ? container.querySelector(`.page-container[data-page-index="${pageIdx}"]`)
+      : null;
+    const scope = pageDiv || container;
+    const compactKey = String((typeof normalizePartNo === 'function') ? normalizePartNo(key) : key)
+      .replace(/[-\s]/g, '').toUpperCase();
+    scope.querySelectorAll('.textLayer span').forEach(span => {
+      const raw = (span.textContent || '').replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).replace(/[－–—]/g, '-');
+      const trimmed = raw.trim();
+      const compact = trimmed.replace(/[-\s]/g, '').toUpperCase();
+      if (!compact) return;
+      if (partKeysEqual(trimmed, key) || compact === compactKey) matched.push(span);
+    });
+  }
+
+  if (!matched.length) return false;
+  // 找到後才清舊高亮並套用 — 重試過程不閃爍
+  clearPartFocusHighlight();
+  matched.forEach(el => {
+    applyBlueFocusStyle(el);
+    if (el.classList && el.classList.contains('textLayer') === false && el.tagName === 'SPAN') {
+      el.style.color = 'transparent';
+    }
+  });
+  return true;
+}
+
+function jumpToPart(key) {
+  if (!key) return;
+  if (!currentPdfDoc) { console.warn('no pdf'); return; }
+  let pageIdx = findPageForPart(key);
+  if (pageIdx === null || pageIdx === undefined) {
+    // 後備：掃一遍 pagePartKeys（含索引頁）
+    const norm = (typeof normalizePartNo === 'function') ? normalizePartNo(key) : String(key).toUpperCase();
+    for (const [idx, list] of pagePartKeys.entries()) {
+      if (!list) continue;
+      for (const item of list) {
+        const k = typeof item === 'string' ? item : (item && item.key);
+        if (!k) continue;
+        if (k === key || ((typeof normalizePartNo === 'function' ? normalizePartNo(k) : String(k).toUpperCase()) === norm)) {
+          pageIdx = idx; break;
+        }
+      }
+      if (pageIdx != null) break;
+    }
+  }
+  if (pageIdx === null || pageIdx === undefined) {
+    alert('找不到此零件所在的 PDF 頁面。');
+    return;
+  }
+  const alreadyOnPage = (currentPageIndex === pageIdx) &&
+    (String(currentSelectValue) === String(pageIdx));
+
+  selectedKey = key;
+  currentSelectValue = String(pageIdx);
+  currentPageIndex = pageIdx;
+  updateCustomSelectUI(String(pageIdx));
+  renderPartList(currentSelectValue === 'all' ? 'all' : 'page', pageIdx, false);
+
+  if (!alreadyOnPage) {
+    scrollToPage(pageIdx);
+  } else {
+    // 同頁也確保該頁在渲染集合內
+    renderPagesInRange(pageIdx);
+  }
+
+  clearPartFocusHighlight(); // 只在換選取時清一次
+  let tries = 0;
+  const tryHl = () => {
+    tries++;
+    if (highlightPartOnPage(key)) return;
+    if (tries >= 20) return;
+    setTimeout(tryHl, 180);
+  };
+  setTimeout(tryHl, alreadyOnPage ? 80 : 280);
+}
+
 function renderPartList(mode = 'page', pageIdx = 0, scrollToTop = false) {
   const box = $('partList');
   let keys = [];
   const q = $('partSearch').value.trim().toUpperCase();
   
   if (q) {
-    keys = [...partInfoMap.keys()].filter(k => {
-        const info = partInfoMap.get(k);
-        if (!info) return false;
-        const name = info.name ? String(info.name).toUpperCase() : '';
-        const rawName = info.rawName ? String(info.rawName).toUpperCase() : '';
-        return String(k).toUpperCase().includes(q) || name.includes(q) || rawName.includes(q);
-    });
+    // V20.42：項次→零件號碼→品名→數量；數字搜尋只打在項次/零件號；過濾不完整號碼
+    const allKeys = [...partInfoMap.keys()];
+    const isDigitQuery = /^\d+$/.test(q);
+    const qCompact = q.replace(/[-\s]/g, '');
+    const scored = [];
+
+    const looksComplete = (k) => {
+      const s = String(k);
+      const hy = (s.match(/-/g) || []).length;
+      return hy >= 2 && s.length >= 10;
+    };
+
+    for (const k of allKeys) {
+      const info = partInfoMap.get(k);
+      if (!info) continue;
+      const itemNo = String(info.itemNo || '').trim();
+      const partNo = String(k).toUpperCase();
+      const partNoCompact = partNo.replace(/[-\s]/g, '');
+      const name = String(info.name || '').toUpperCase();
+      const rawName = String(info.rawName || '').toUpperCase();
+      const qty = String(info.qty != null ? info.qty : '');
+
+      // 若存在更完整的同號（例如 1CF-F8379 vs 1CF-F8379-00），略過短的
+      if (!looksComplete(k)) {
+        const compact = partNoCompact;
+        const hasLonger = allKeys.some(other => {
+          if (other === k) return false;
+          if (!looksComplete(other)) return false;
+          const oc = String(other).toUpperCase().replace(/[-\s]/g, '');
+          return oc.startsWith(compact) || compact.startsWith(oc);
+        });
+        if (hasLonger) continue;
+      }
+
+      let rank = 0;
+      if (itemNo && itemNo.toUpperCase() === q) rank = 1;
+      else if (itemNo && itemNo.toUpperCase().includes(q)) rank = 2;
+      else if (partNo.includes(q) || partNoCompact.includes(qCompact)) rank = 3;
+      else if (!isDigitQuery && (name === q || rawName === q)) rank = 4;
+      else if (!isDigitQuery && (name.includes(q) || rawName.includes(q))) {
+        // 品名命中但排除「品名裡只是另一個零件號」的髒資料
+        const nameLooksLikePartSoup = /[A-Z0-9]{2,}-[A-Z0-9]{2,}/.test(name) && name.split(/\s+/).length >= 2;
+        if (nameLooksLikePartSoup && !name.startsWith(q)) continue;
+        rank = 5;
+      } else if (qty && qty === q) rank = 6;
+      else continue;
+
+      const itemNum = parseInt(itemNo, 10);
+      scored.push({
+        key: k,
+        rank,
+        itemNum: isNaN(itemNum) ? 99999 : itemNum,
+        partNo,
+        complete: looksComplete(k) ? 0 : 1
+      });
+    }
+    scored.sort((a, b) => a.rank - b.rank || a.complete - b.complete || a.itemNum - b.itemNum || a.partNo.localeCompare(b.partNo));
+    keys = scored.map(s => s.key);
   } else {
     if (mode === 'all') keys = [...partInfoMap.keys()];
     else keys = pagePartKeys.get(pageIdx) || [];
@@ -1640,11 +2018,12 @@ function renderPartList(mode = 'page', pageIdx = 0, scrollToTop = false) {
     const btnText = inPick ? `✓ 已加入 (${pickData.qty})` : '＋ PickList';
     const btnClass = inPick ? 'add-btn added' : 'add-btn';
     const sel = key === selectedKey ? ' selected' : '';
+    // 顯示次序：項次 → 零件號碼 → 品名 → 數量（與零件圖欄位一致）
     const itemPrefix = info.itemNo ? `<span style="color:#94a3b8;font-size:12px;margin-right:6px;">[${esc(info.itemNo)}]</span>` : '';
     
     html += `<div class="part-row${sel}" data-key="${esc(key)}">
-      <span class="pno">${esc(key)}</span>
-      <span class="pname">${itemPrefix}${esc(info.name)}</span>
+      <span class="pno">${itemPrefix}${esc(key)}</span>
+      <span class="pname">${esc(info.name)}</span>
       <span class="pmeta"><span class="qty">×${info.qty}</span><br>${esc(info.category)}</span>
       <button class="${btnClass}" data-add="${esc(key)}">${btnText}</button>
     </div>`;
@@ -1653,11 +2032,16 @@ function renderPartList(mode = 'page', pageIdx = 0, scrollToTop = false) {
   if (scrollToTop) box.scrollTop = 0;
 
   box.querySelectorAll('.part-row').forEach(row => {
+    // V20.38：左鍵／點擊 → 跳到該零件所在頁與位置（手機可用）
     row.addEventListener('click', e => {
       if (e.target.closest('.add-btn')) return;
-      selectedKey = row.dataset.key;
-      renderPartList(mode, pageIdx);
+      const key = row.dataset.key;
+      selectedKey = key;
+      if (key) jumpToPart(key);
+      else renderPartList(mode, pageIdx);
     });
+    row.style.cursor = 'pointer';
+    row.title = '點擊：跳至 PDF 位置';
   });
   box.querySelectorAll('.add-btn').forEach(btn => {
     btn.addEventListener('click', e => { e.stopPropagation(); addToPickList(btn.dataset.add); });
