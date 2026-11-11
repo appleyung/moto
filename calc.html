@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>零件清單價值統計</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; 
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: #f1f5f9;
+    color: #1e293b;
+    display: flex;
+    justify-content: center;
+  }
+
+  .wrap {
+    width: 100%;
+    max-width: 800px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    padding-left: calc(8px + env(safe-area-inset-left));
+    padding-right: calc(8px + env(safe-area-inset-right));
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+    gap: 8px;
+    transition: padding 0.3s ease;
+  }
+
+  .split-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    padding: 10px;
+    overflow: hidden;
+  }
+
+  .head-row {
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+    gap: 8px;
+  }
+  
+  .title-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  .head-row h2 { font-size: 15px; margin: 0; font-weight: 600; color: #0f172a; white-space: nowrap; }
+
+  .switch { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font-size: 13px; color: #475569; white-space: nowrap; }
+  .switch input { width: 16px; height: 16px; accent-color: #0d9488; margin: 0; }
+
+  textarea {
+    flex: 1;
+    width: 100%;
+    min-height: 60px;
+    resize: none;
+    padding: 10px;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #0f172a;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    outline: none;
+    white-space: pre;
+    overflow: auto;
+  }
+  textarea:focus { border-color: #0d9488; background: #fff; }
+
+  .btn-group {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .btn {
+    border: none; background: #0d9488; color: #fff;
+    font-size: 13px; padding: 6px 12px; border-radius: 6px; cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn.ghost { background: #fff; color: #0d9488; border: 1px solid #cbd5e1; }
+  .btn:active { opacity: 0.8; }
+
+  .bad {
+    margin-top: 6px; font-size: 12px; color: #b91c1c;
+    background: #fef2f2; border: 1px solid #fecaca;
+    border-radius: 6px; padding: 4px 8px; display: none;
+    flex-shrink: 0;
+  }
+  .bad.show { display: block; }
+
+  .table-wrap {
+    flex: 1;
+    overflow: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    min-height: 80px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 13px;
+  }
+  thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: #f1f5f9;
+    text-align: left; padding: 8px 4px;
+    font-weight: 600; color: #475569;
+    border-bottom: 1px solid #e2e8f0;
+    white-space: nowrap;
+  }
+  tbody td {
+    padding: 8px 4px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    word-break: break-all;
+  }
+  tbody tr:nth-child(even) { background: #fcfdfe; }
+  
+  th:nth-child(1), td:nth-child(1) { width: 36%; }
+  th:nth-child(2), td:nth-child(2) { width: 28%; }
+  th:nth-child(3), td:nth-child(3) { width: 8%; text-align: center; }
+  th:nth-child(4), td:nth-child(4) { width: 14%; text-align: right; }
+  th:nth-child(5), td:nth-child(5) { width: 14%; text-align: right; }
+
+  td.pno { font-family: ui-monospace, monospace; color: #0d9488; font-weight: 600; font-size: 12px; }
+  td.pname { color: #1e293b; font-size: 12.5px; }
+  td.sub { color: #0f766e; font-weight: 600; font-size: 12.5px; }
+  td.unit { color: #94a3b8; font-size: 11.5px; }
+  .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .empty td { text-align: center; color: #94a3b8; padding: 40px 0; }
+
+  .total-card {
+    flex-shrink: 0;
+    background: #0f766e;
+    color: #fff;
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 10px;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+  }
+  .total-card .label { font-size: 15px; font-weight: 500; opacity: 0.95; }
+  .total-card .total { font-size: 26px; font-weight: 700; font-family: ui-monospace, monospace; letter-spacing: 1px; }
+
+  @media (orientation: landscape) and (min-width: 600px), (min-width: 900px) {
+    html, body { height: 100%; overflow: hidden; }
+    .wrap {
+      max-width: none; width: 100%; height: 100vh; display: grid;
+      grid-template-columns: 1fr 1fr; grid-template-rows: 1fr auto; align-content: stretch;
+      padding: 12px;
+      padding-left: calc(12px + env(safe-area-inset-left));
+      padding-right: calc(12px + env(safe-area-inset-right));
+      padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    }
+    .split-card { height: 100%; max-height: none; }
+    .total-card { grid-column: 1 / -1; }
+    textarea { height: 100%; }
+    .table-wrap { height: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  
+  <section class="split-card">
+    <div class="head-row">
+      <div class="title-group">
+        <h2>零件清單</h2>
+        <label class="switch">
+          <input type="checkbox" id="merge">
+          <span>合併相同</span>
+        </label>
+      </div>
+      <button class="btn ghost" id="clearBtn">清空</button>
+    </div>
+
+    <textarea id="input" spellcheck="false" placeholder="貼上清單，自動計算...&#10;例：23100-K97-000 adv160 皮帶 $1,300.00&#10;   1DK-E7641-00 Force皮帶 $500"></textarea>
+    <div class="bad" id="bad"></div>
+  </section>
+
+  <section class="split-card">
+    <div class="head-row">
+      <h2>統計結果</h2>
+      <div class="btn-group">
+        <button class="btn" id="yamahaBtn">Yamaha條形碼複製</button>
+        <button class="btn" id="copyBtn">複製</button>
+      </div>
+    </div>
+    
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>零件號</th>
+            <th>名稱</th>
+            <th>數量</th>
+            <th>總價</th>
+            <th>單價</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr class="empty"><td colspan="5">等待輸入資料...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="total-card">
+    <span class="label">總價值</span>
+    <span class="total" id="total">$ 0</span>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const inputEl  = document.getElementById('input');
+  const tbody    = document.getElementById('tbody');
+  const totalEl  = document.getElementById('total');
+  const badEl    = document.getElementById('bad');
+  const mergeEl  = document.getElementById('merge');
+  const clearBtn = document.getElementById('clearBtn');
+  const copyBtn  = document.getElementById('copyBtn');
+  const yamahaBtn = document.getElementById('yamahaBtn');
+
+  function fmt(n) {
+    return Math.round(n).toLocaleString('zh-TW');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  function parseLine(raw) {
+    let line = raw.replace(/[\u200b-\u200d\ufeff]/g, '').replace(/\u3000/g, ' ').trim();
+    if (!line) return null;
+    line = line.replace(/[~～\s]+$/, '');
+    if (!line) return null;
+
+    // 忽略表頭或總計相關字眼
+    if (/總價值|零件號|總計|合計/.test(line)) return null;
+
+    line = line.replace(/\t/g, ' ');
+
+    const priceRe = /[¥￥$＄]+\s*([\d.,]+)/g;
+    let m;
+    let matches = [];
+    while ((m = priceRe.exec(line)) !== null) {
+      matches.push(m);
+    }
+    
+    if (matches.length === 0) return { error: true, raw: raw.trim() };
+    
+    // 改為取第一個匹配（最左側）的價格作為總價
+    const targetPriceMatch = matches[0];
+    const priceStr = targetPriceMatch[1].replace(/,/g, ''); 
+    const price = parseFloat(priceStr);
+    if (!isFinite(price) || price < 0) return { error: true, raw: raw.trim() };
+
+    let beforePrice = line.slice(0, targetPriceMatch.index).trim();
+
+    let qty = 1;
+    let namePart = beforePrice;
+    const qtyRe = /[xX×*]\s*(\d+)/g;
+    let qm, lastQm = null;
+    while ((qm = qtyRe.exec(beforePrice)) !== null) lastQm = qm;
+    
+    if (lastQm) {
+      const q = parseInt(lastQm[1], 10);
+      qty = (q && q > 0) ? q : 1;
+      namePart = beforePrice.slice(0, lastQm.index).trim();
+    }
+
+    let partNo = '', partName = '';
+    
+    const partNoMatch = namePart.match(/^([a-zA-Z0-9\-\.\_\/]+)[ \t]*(.*)$/);
+    
+    if (partNoMatch) {
+      partNo = partNoMatch[1];
+      partName = partNoMatch[2].trim();
+    } else {
+      const firstCJK = namePart.search(/[\u4e00-\u9fa5]/);
+      if (firstCJK > 0) {
+        partNo = namePart.slice(0, firstCJK).trim();
+        partName = namePart.slice(firstCJK).trim();
+      } else if (firstCJK === 0) {
+        partNo = ''; partName = namePart.trim();
+      } else {
+        const sp = namePart.search(/\s/);
+        if (sp > 0) {
+          partNo = namePart.slice(0, sp).trim(); partName = namePart.slice(sp + 1).trim();
+        } else {
+          partNo = namePart.trim(); partName = '';
+        }
+      }
+    }
+
+    partNo = partNo.replace(/[\s\-–—_]+$/, '').trim();
+    partName = partName.replace(/^[\s\-–—_]+/, '').trim();
+
+    if (!partNo && !partName) return { error: true, raw: raw.trim() };
+    return { partNo, partName, qty, price, raw: raw.trim() };
+  }
+
+  function parseText(text) {
+    const items = [];
+    const bad = [];
+    text.split(/\r?\n/).forEach(raw => {
+      if (!raw.trim()) return;
+      const r = parseLine(raw);
+      if (!r) return;
+      if (r.error) { bad.push(r.raw); return; }
+      items.push(r);
+    });
+    return { items, bad };
+  }
+
+  let lastRows = [];
+  let lastTotal = 0;
+
+  function render() {
+    const { items, bad } = parseText(inputEl.value);
+    const doMerge = mergeEl.checked;
+
+    let rows;
+    if (doMerge) {
+      const map = new Map();
+      for (const it of items) {
+        const key = it.partNo || ('NAME:' + it.partName);
+        if (map.has(key)) {
+          const cur = map.get(key);
+          cur.qty += it.qty;
+          cur.price += it.price;
+          if (!cur.partName && it.partName) cur.partName = it.partName;
+        } else {
+          map.set(key, { partNo: it.partNo, partName: it.partName, qty: it.qty, price: it.price });
+        }
+      }
+      rows = Array.from(map.values());
+    } else {
+      rows = items.map(it => ({ partNo: it.partNo, partName: it.partName, qty: it.qty, price: it.price }));
+    }
+
+    let total = 0;
+
+    tbody.innerHTML = '';
+    if (rows.length === 0) {
+      tbody.innerHTML = '<tr class="empty"><td colspan="5">等待輸入資料...</td></tr>';
+    } else {
+      const frag = document.createDocumentFragment();
+      for (const r of rows) {
+        total += r.price;
+        const unit = r.qty > 0 ? r.price / r.qty : 0;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td class="pno">' + escapeHtml(r.partNo || '—') + '</td>' +
+          '<td class="pname">' + escapeHtml(r.partName || '—') + '</td>' +
+          '<td class="num" style="text-align:center;">' + r.qty + '</td>' +
+          '<td class="num sub">' + fmt(r.price) + '</td>' +
+          '<td class="num unit">' + fmt(unit) + '</td>';
+        frag.appendChild(tr);
+      }
+      tbody.appendChild(frag);
+    }
+
+    lastRows = rows;
+    lastTotal = total;
+    totalEl.textContent = '$ ' + fmt(total);
+
+    if (bad.length > 0) {
+      badEl.classList.add('show');
+      badEl.innerHTML = '⚠ 有 ' + bad.length + ' 行未識別 (缺少總價)';
+    } else {
+      badEl.classList.remove('show');
+    }
+  }
+
+  let inputTimer;
+  inputEl.addEventListener('input', () => {
+    clearTimeout(inputTimer);
+    inputTimer = setTimeout(render, 200);
+  });
+
+  inputEl.addEventListener('paste', () => setTimeout(render, 50));
+  mergeEl.addEventListener('change', render);
+
+  clearBtn.addEventListener('click', () => {
+    inputEl.value = '';
+    render();
+    inputEl.focus();
+  });
+
+  copyBtn.addEventListener('click', async () => {
+    if (!lastRows.length) return;
+    
+    let txt = '零件號\t名稱\t數量\t總價\n';
+    for (const r of lastRows) {
+      txt += (r.partNo || '') + '\t' + (r.partName || '') + '\tx' + r.qty + '\t$' + fmt(r.price) + '\n';
+    }
+    txt += '\n總價值：$ ' + fmt(lastTotal);
+
+    try {
+      await navigator.clipboard.writeText(txt);
+      copyBtn.textContent = '已複製';
+      setTimeout(() => { copyBtn.textContent = '複製'; }, 1500);
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+      copyBtn.textContent = '已複製';
+      setTimeout(() => { copyBtn.textContent = '複製'; }, 1500);
+    }
+  });
+
+  yamahaBtn.addEventListener('click', async () => {
+    if (!lastRows.length) return;
+    
+    let txt = '';
+    for (const r of lastRows) {
+      let rawNo = (r.partNo || '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+      let finalNo = rawNo;
+      
+      if (rawNo.length > 0) {
+        if (rawNo.length < 12) {
+          finalNo = rawNo.padEnd(12, '0');
+        } else if (rawNo.length > 12) {
+          finalNo = rawNo.slice(0, 12);
+        }
+      }
+      
+      const unit = r.qty > 0 ? r.price / r.qty : 0;
+      const unitStr = unit % 1 === 0 ? Math.round(unit).toString() : unit.toFixed(2);
+      
+      txt += finalNo + '\t' + (r.partName || '') + '\t' + r.qty + '\t' + unitStr + '\n';
+    }
+
+    try {
+      await navigator.clipboard.writeText(txt);
+      yamahaBtn.textContent = '已複製';
+      setTimeout(() => { yamahaBtn.textContent = 'Yamaha條形碼複製'; }, 1500);
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+      yamahaBtn.textContent = '已複製';
+      setTimeout(() => { yamahaBtn.textContent = 'Yamaha條形碼複製'; }, 1500);
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
