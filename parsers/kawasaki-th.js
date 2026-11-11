@@ -98,116 +98,21 @@
     return `${fallback}，${clipped}`;
   }
   function extractTitleKawasaki(items, pageIndex, fallback) {
-    const loc = (typeof kawasakiLocale !== 'undefined' && kawasakiLocale === 'th') ? 'th' : 'id';
-    const strs = (items || []).map(it => String(it.str || '')).filter(Boolean);
-    // 無空白串：對抗單字元拆分
-    const nospace = strs.join('').replace(/\s+/g, '');
-    // 有空白串（黏字母）
-    let joined = '';
-    const sorted = (items || []).filter(it => it && it.transform && String(it.str || '').length).slice().sort((a, b) => {
-      const dy = (b.transform[5] || 0) - (a.transform[5] || 0);
-      if (Math.abs(dy) > 5) return dy;
-      return (a.transform[4] || 0) - (b.transform[4] || 0);
-    });
-    let lastY = null, lastR = null;
-    for (const it of sorted) {
-      const s = String(it.str || '');
-      const x = it.transform[4] || 0, y = it.transform[5] || 0;
-      const w = it.width || s.length * 3;
-      if (joined) {
-        const same = lastY != null && Math.abs(y - lastY) <= 5;
-        const prev = joined.slice(-1);
-        const glue = same && /[A-Za-z0-9]/.test(prev) && /[A-Za-z0-9]/.test(s[0]);
-        if (!glue) {
-          if (!same) joined += ' | ';
-          else if (lastR != null && x > lastR + 1.2) joined += ' ';
-        }
-      }
-      joined += s;
-      lastY = y; lastR = x + w;
-    }
-    const compact = joined.replace(/([A-Za-z])\s+(?=[A-Za-z])/g, '$1').replace(/ +/g, ' ');
-
-    if (loc === 'th') {
-      let head = '';
-      // Engine-เครื่องยนต์（nospace 最穩）
-      let m = nospace.match(/(Engine|Chassis|Frame|Electrical|Transmission)[-–—]?([\u0E00-\u0E7F]{2,24})/i);
-      if (m) head = m[1] + '-' + m[2];
-      else {
-        m = compact.match(/\b(Engine|Chassis|Frame|Electrical|Transmission)\s*[-–—]\s*([\u0E00-\u0E7F]{2,24})/i);
-        if (m) head = m[1] + '-' + m[2];
-      }
-
-      let sub = '';
-      // This page covers: Oil Pump-ปั๊มน้ำมันเครื่อง
-      m = nospace.match(/Thispagecovers:?([A-Za-z][A-Za-z0-9\/,]{2,35})[-–—]?([\u0E00-\u0E7F]{0,24})/i);
-      if (m) {
-        sub = m[1] + (m[2] ? '-' + m[2] : '');
-      } else {
-        m = compact.match(/This\s*page\s*covers\s*:?\s*([A-Za-z][A-Za-z0-9\/\(\),\s]{2,40})\s*[-–]?\s*([\u0E00-\u0E7F]{0,24})/i);
-        if (m) sub = (m[1].replace(/\s+/g, ' ').trim() + (m[2] ? '-' + m[2] : '')).trim();
-      }
-      if (sub && /Quantity|ZX25|GMFNN|RefNo|PartNo/i.test(sub)) sub = '';
-
-      let groupNo = '';
-      m = nospace.match(/GROUPNO\.?(\d{1,3})/i) || compact.match(/GROUP\s*NO\.?\s*(\d{1,3})/i);
-      if (m) groupNo = m[1];
-
-      if (head && sub) return limitKawasakiTitle(fallback, head + ' / ' + sub);
-      if (head) return limitKawasakiTitle(fallback, head);
-      if (sub) {
-        if (groupNo) return limitKawasakiTitle(fallback, 'Group ' + groupNo + ' ' + sub);
-        return limitKawasakiTitle(fallback, sub);
-      }
-      if (groupNo) return limitKawasakiTitle(fallback, 'Group ' + groupNo);
-      return fallback;
-    }
-
-    // 印尼／英文川崎：8. Crankshaft / 30. Swingarm / Pictorial Index
-    let m = nospace.match(/(\d{1,3})\.([A-Z][A-Za-z][A-Za-z0-9\/\-()]{1,42})/);
+    const allText = (items || []).map(it => String(it.str || '')).join(' ');
+    // 直接找 "This page covers:" 後的內容
+    let m = allText.match(/This\s+page\s+covers\s*:?\s*([^\n|]{3,80})/i);
     if (m) {
-      let body = m[2].replace(/([a-z])([A-Z])/g, '$1 $2'); // CamelCase 略分詞可選
-      // 在關鍵詞邊界截斷
-      body = body.split(/(?:RefNo|PartNo|Description|SpecCode|Quantity|F\d{3,}|\d{5}-)/i)[0];
-      // 常見節名還原空格
-      body = body
-        .replace(/^(Cylinder)(Head|Piston)/i, '$1 $2')
-        .replace(/^(Air)(Cleaner)/i, '$1 $2')
-        .replace(/^(Front|Rear)(Brake|Hub|Fender|Wheel)/i, '$1 $2')
-        .replace(/^(Engine)(Mount)/i, '$1 $2')
-        .replace(/^(Gear)(Change)/i, '$1 $2')
-        .replace(/^(Oil)(Pump|Pan)/i, '$1 $2')
-        .replace(/^(Water)(Pipe)/i, '$1 $2')
-        .replace(/^(Brake)(Pedal)/i, '$1 $2')
-        .replace(/^(Throttle)(Body)/i, '$1 $2')
-        .replace(/(Shock)(Absorber)/i, '$1 $2')
-        .replace(/(Connecting)(Rod)/i, '$1 $2')
-        .trim();
-      if (body.length >= 3 && body.length <= 45 && !/^(Ref|Part|No)$/i.test(body))
-        return limitKawasakiTitle(fallback, m[1] + '. ' + body);
+      let title = m[1].replace(/\s+/g, ' ').trim();
+      title = title.split(/\s+(Ref\.?\s*No|Part\s*No|Description|Quantity|GROUP)/i)[0].trim();
+      title = title.replace(/[-–—\s,]+$/, '').trim();
+      if (title.length >= 3 && title.length <= 70) return title;
     }
-    m = compact.match(/\b(\d{1,3})\.\s*([A-Z][A-Za-z0-9\/\-,()\s]{2,48})/);
+    // nospace 後備
+    const ns = (items || []).map(it => String(it.str || '')).join('').replace(/\s+/g, '');
+    m = ns.match(/Thispagecovers:?([A-Za-z(][^\d]{2,60}?)(?:Ref|Part|Description|Quantity|GROUP)/i);
     if (m) {
-      let body = m[2].replace(/\s+/g, ' ').trim();
-      body = body.split(/\s+Ref\.?\s*No|\s+Part\s*No|\s+Description|\s+Spec\s*Code|\s+Quantity|\s+\d{5}-/i)[0].trim();
-      if (/^(Ref|Part|No)$/i.test(body)) body = '';
-      if (body.length >= 3 && body.length <= 40 && !/\d{5}-/.test(body))
-        return limitKawasakiTitle(fallback, m[1] + '. ' + body);
-    }
-    m = compact.match(/This\s*page\s*covers\s*:?\s*([^\n|]{3,60})/i);
-    if (m) {
-      let title = m[1].replace(/\s+/g, ' ').replace(/\s*Ref\.?\s*No.*$/i, '').replace(/\s*GROUP\s*NO.*$/i, '').trim();
-      if (title.length >= 3 && title.length <= 50) return limitKawasakiTitle(fallback, title);
-    }
-    if (/Pictorial\s*Index/i.test(compact) || /PictorialIndex/i.test(nospace))
-      return limitKawasakiTitle(fallback, 'Pictorial Index');
-    if (/Color\s*Combination\s*Parts\s*List/i.test(compact) || /ColorCombinationPartsList/i.test(nospace))
-      return limitKawasakiTitle(fallback, 'Color Combination Parts List');
-    // 常見章名無編號
-    m = compact.match(/\b((?:Cylinder Head|Crankshaft|Swingarm|Front Brake|Rear Hub|Engine Mount|Camshaft|Muffler|Clutch|Transmission|Frame|Fairing)[A-Za-z0-9\/\-\s()]{0,20})\b/i);
-    if (m) {
-      const title = m[1].replace(/\s+/g, ' ').trim().slice(0, 40);
-      if (title.length >= 4) return limitKawasakiTitle(fallback, title);
+      let title = m[1].replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-–—]+/g, '-').trim();
+      if (title.length >= 3) return title;
     }
     return fallback;
   }
@@ -217,6 +122,16 @@
     const allItems = (items || []).filter(it => it && it.transform && String(it.str || '').length);
     if (!allItems.length) return pageKeys;
 
+    // 泰國版：若 pageCategory 空或是 GROUP NO，改用 extractTitleKawasaki
+    if (loc === 'th' && (!pageCategory || /GROUP\s*NO/i.test(pageCategory) || pageCategory.length < 3)) {
+      const tt = extractTitleKawasaki(items, 0, '');
+      if (tt && tt.length >= 3 && !/^GROUP/i.test(tt)) pageCategory = tt;
+    }
+
+    // 泰國版直接用列解析（欄解析數量不準）
+    if (loc === 'th') {
+      // skip to row parser
+    } else {
     // 偵測旋轉：零件號是否「同 X、Y 分散」→ 直欄版面（與 Honda 印尼類似）
     const probeParts = [];
     const probeRe = new RegExp(KAWASAKI_PART_REGEX.source, 'gi');
@@ -278,7 +193,7 @@
             }
           }
           if (foundPart) {
-            if (/^[1-9]\d{0,1}$/.test(s)) { qtys.push(parseInt(s, 10)); continue; }
+            if (/^[1-9]\d{0,1}$/.test(s)) { qtys.push({ n: parseInt(s, 10), x: it.transform[4] || 0 }); continue; }
             if (/^[A-Za-z][A-Za-z0-9\-\/,=.#+\s]{2,}$/.test(s)) {
               name = name ? (name + ' ' + s) : s;
             }
@@ -288,7 +203,12 @@
         seen.add(partNo);
         name = (name || '').replace(/\s+/g, ' ').trim();
         if (!/[A-Za-z]{3,}/.test(name)) name = '';
-        const qty = qtys.length ? qtys[0] : 1;
+        // 取最右的數字作為數量
+        let qty = 1;
+        if (qtys.length) {
+          qtys.sort((a, b) => b.x - a.x);
+          qty = qtys[0].n;
+        }
         const dispName = name ? translateText(name) : '';
         if (!partInfoMap.has(partNo)) {
           partInfoMap.set(partNo, {
@@ -303,9 +223,10 @@
         }
         if (!pageKeys.includes(partNo)) pageKeys.push(partNo);
       }
-      if (pageKeys.length >= 2) return pageKeys;
-      // 欄解析失敗則退回一般列解析
+      // 不提早返回，讓列解析可更新數量
+      // if (pageKeys.length >= 2) return pageKeys;
     }
+    } // end else for non-Thai column parser
 
     // —— 一般橫列版面 ——
     let srcItems = loc === 'id' ? allItems : kawasakiTableItems(items);
@@ -388,29 +309,36 @@
 
       let qty = 1;
       try {
-        let partY = null, partX = null;
+        const qtyCol = [];
+        for (const it of allItems) {
+          const x = it.transform[4] || 0;
+          if (x < 700) continue;
+          const s = String(it.str || '').trim();
+          if (/^\d{1,2}$/.test(s)) {
+            const n = parseInt(s, 10);
+            if (n >= 1 && n <= 20) qtyCol.push({ n, y: it.transform[5] || 0 });
+          }
+        }
+        let partY = null;
+        const pref = f.pno.split('-')[0];
         for (const it of allItems) {
           const s = String(it.str || '').replace(/[－–—]/g, '-').replace(/\s+/g, '');
-          if (s === f.pno || (s.indexOf(pref) === 0 && /\d{5}-/.test(s))) {
-            partY = it.transform[5]; partX = it.transform[4]; break;
+          const x = it.transform[4] || 0;
+          if (x < 360 || x > 450) continue;
+          if (s === f.pno || s.startsWith(pref + '-') || s === pref) {
+            partY = it.transform[5];
+            break;
           }
         }
-        if (partY != null) {
-          let bestX = -Infinity, bestN = null;
-          for (const it of allItems) {
-            if (Math.abs((it.transform[5] || 0) - partY) > 8) continue;
-            if (partX != null && (it.transform[4] || 0) < partX) continue;
-            const s = String(it.str || '').trim();
-            if (!/^[1-9]\d{0,1}$/.test(s)) continue;
-            const n = parseInt(s, 10);
-            if (n >= 1 && n <= 99 && (it.transform[4] || 0) >= bestX) {
-              bestX = it.transform[4] || 0; bestN = n;
-            }
+        if (partY != null && qtyCol.length) {
+          let best = null, bestDist = 15;
+          for (const q of qtyCol) {
+            const d = Math.abs(q.y - partY);
+            if (d < bestDist) { bestDist = d; best = q; }
           }
-          if (bestN != null) qty = bestN;
+          if (best) qty = best.n;
         }
       } catch (e) {}
-
       let name = '';
       const en = after.match(/[A-Za-z][A-Za-z0-9\-\/,=.#+\s]{2,60}/);
       if (en) {
@@ -435,7 +363,8 @@
         const info = partInfoMap.get(key);
         if (dispName && (!info.name || info.name === '（無名稱）')) { info.name = dispName; info.rawName = dispName; }
         if (itemNo) info.itemNo = itemNo;
-        if (qty >= 1 && qty <= 99) info.qty = qty;
+        // 只在找到有效數量時更新（X>700 的數量欄）
+        if (qty >= 1 && qty <= 20) info.qty = qty;
       }
       if (!pageKeys.includes(key)) pageKeys.push(key);
     }
@@ -466,5 +395,155 @@
   if (typeof global.kawasakiTextRect === "undefined" && typeof kawasakiTextRect === "function") global.kawasakiTextRect = kawasakiTextRect;
   if (typeof global.limitKawasakiTitle === "undefined" && typeof limitKawasakiTitle === "function") global.limitKawasakiTitle = limitKawasakiTitle;
   if (typeof global.extractTitleKawasaki === "undefined" && typeof extractTitleKawasaki === "function") global.extractTitleKawasaki = extractTitleKawasaki;
-  if (typeof global.parseKawasakiItems === "undefined" && typeof parseKawasakiItems === "function") global.parseKawasakiItems = parseKawasakiItems;
+  // Thai 版強制覆蓋（id.js 先載入）
+  if (typeof parseKawasakiItems === "function") global.parseKawasakiItems = parseKawasakiItems;
 })(typeof window !== "undefined" ? window : globalThis);
+
+// Kawasaki Thailand: shift highlight left 50 and expand to cover full part number
+(function () {
+  if (typeof window === "undefined") return;
+  window.EPC_BRAND = window.EPC_BRAND || {};
+  const b = window.EPC_BRAND["kawasaki-th"];
+  if (b) {
+    b.highlightOffsetX = -50;
+    b.highlightExpandLeft = 50;
+  }
+})();
+
+// Kawasaki Thailand custom highlight: covers full part number including special format (130BA0512)
+(function () {
+  if (typeof window === "undefined") return;
+  window.EPC_BRAND = window.EPC_BRAND || {};
+  const b = window.EPC_BRAND["kawasaki-th"];
+  if (!b) return;
+
+  b.highlight = function (pageDiv, textContent, viewport, helpers) {
+    if (!textContent || !textContent.items) return false;
+    const { partInfoMap, pagePartKeys, bindPartEvent, normalizePartNo, pdfjsLib } = helpers || {};
+    if (!pdfjsLib) return false;
+
+    const items = (textContent.items || []).filter(it => it && it.transform && String(it.str || '').length);
+    if (!items.length) return false;
+
+    // Create highlight canvas
+    const hlCanvas = document.createElement('canvas');
+    hlCanvas.className = 'highlight-layer';
+    hlCanvas.width = viewport.width;
+    hlCanvas.height = viewport.height;
+    hlCanvas.style.width = viewport.width + 'px';
+    hlCanvas.style.height = viewport.height + 'px';
+    pageDiv.appendChild(hlCanvas);
+    const ctx = hlCanvas.getContext('2d');
+    ctx.fillStyle = 'rgba(255, 235, 59, 0.45)';
+
+    const pageIdx = parseInt(pageDiv.dataset.pageIndex, 10);
+    const seen = new Set();
+    const OFFSET_X = 0; // shift left to cover full part number
+
+    // Patterns: standard 12046-0621 and special 130BA0512
+    const reStd = /\d{5}\s*-\s*\d{3,6}(?:\s*-\s*[A-Z0-9]{1,6})?/gi;
+    const reSpecial = /\d{3}[A-Z]{1,2}\d{4}[A-Z0-9]{0,4}/gi;
+
+    // Group items by approximate Y (same row)
+    const rows = new Map();
+    for (const it of items) {
+      const y = Math.round((it.transform[5] || 0) / 3) * 3;
+      if (!rows.has(y)) rows.set(y, []);
+      rows.get(y).push(it);
+    }
+
+    for (const [yKey, rowItems] of rows) {
+      rowItems.sort((a, b) => (a.transform[4] || 0) - (b.transform[4] || 0));
+      let concat = '';
+      const pieces = [];
+      for (const it of rowItems) {
+        const s = String(it.str || '').replace(/[－–—]/g, '-');
+        const start = concat.length;
+        concat += s;
+        pieces.push({ it, start, end: concat.length, s });
+        // add space if gap
+        const next = rowItems[rowItems.indexOf(it) + 1];
+        if (next && (next.transform[4] || 0) > (it.transform[4] || 0) + (it.width || 20) + 2) {
+          concat += ' ';
+        }
+      }
+
+      // Find all part numbers in this row
+      const matches = [];
+      reStd.lastIndex = 0;
+      let m;
+      while ((m = reStd.exec(concat)) !== null) {
+        matches.push({ raw: m[0], index: m.index, end: m.index + m[0].length, type: 'std' });
+      }
+      reSpecial.lastIndex = 0;
+      while ((m = reSpecial.exec(concat)) !== null) {
+        // avoid duplicates if already matched as part of std
+        const already = matches.some(x => m.index >= x.index && m.index < x.end);
+        if (!already) matches.push({ raw: m[0], index: m.index, end: m.index + m[0].length, type: 'special' });
+      }
+
+      for (const match of matches) {
+        const key = normalizePartNo ? normalizePartNo(match.raw.replace(/\s+/g, '')) : match.raw.replace(/\s+/g, '').toUpperCase();
+        if (!key || key.length < 7) continue;
+        const dedupe = key + '@' + yKey;
+        if (seen.has(dedupe)) continue;
+        seen.add(dedupe);
+
+        // Find the piece that contains the start of this match
+        let originPiece = pieces[0];
+        for (const p of pieces) {
+          if (match.index >= p.start && match.index < p.end) { originPiece = p; break; }
+        }
+        if (!originPiece) continue;
+
+        const tx = pdfjsLib.Util.transform(viewport.transform, originPiece.it.transform);
+        const fontH = Math.hypot(tx[2], tx[3]) || ((originPiece.it.height || 10) * viewport.scale) || 12;
+        const charW = fontH * 0.55;
+        const bw = Math.max(charW * key.length, fontH * 4);
+        const bh = Math.max(fontH * 1.0, 11);
+
+        // Shift left by 50 to cover the first part of the part number
+        const left = tx[4] + OFFSET_X;
+        const top = tx[5] - bh * 0.75;
+
+        ctx.fillRect(left, top, bw - 35, bh);
+
+        const hit = document.createElement('div');
+        hit.className = 'part-hit-box';
+        hit.style.left = left + 'px';
+        hit.style.top = top + 'px';
+        hit.style.width = (bw - 35) + 'px';
+        hit.style.height = bh  +'px';
+        hit.dataset.partKey = key;
+        pageDiv.appendChild(hit);
+        if (bindPartEvent) bindPartEvent(hit, key);
+
+        // Update partInfoMap
+        if (partInfoMap) {
+          if (!partInfoMap.has(key)) {
+            partInfoMap.set(key, { name: '（無名稱）', qty: 1, category: '未分類', itemNo: '' });
+          }
+          // For special format (130BA0512), try to find itemNo from left column
+          if (match.type === 'special' && !partInfoMap.get(key).itemNo) {
+            // Look for a short alphanumeric to the left on same row
+            for (const p of pieces) {
+              if (p.end <= match.index) {
+                const leftStr = p.s.trim();
+                if (/^\d{1,4}[A-Z]?$/i.test(leftStr) && leftStr.length <= 5) {
+                  partInfoMap.get(key).itemNo = leftStr.toUpperCase();
+                  break;
+                }
+              }
+            }
+          }
+        }
+        if (pagePartKeys && !isNaN(pageIdx)) {
+          let lst = pagePartKeys.get(pageIdx);
+          if (!lst) { lst = []; pagePartKeys.set(pageIdx, lst); }
+          if (!lst.includes(key)) lst.push(key);
+        }
+      }
+    }
+    return true; // handled
+  };
+})();

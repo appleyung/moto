@@ -468,3 +468,20 @@
   if (typeof global.extractTitleKawasaki === "undefined" && typeof extractTitleKawasaki === "function") global.extractTitleKawasaki = extractTitleKawasaki;
   if (typeof global.parseKawasakiItems === "undefined" && typeof parseKawasakiItems === "function") global.parseKawasakiItems = parseKawasakiItems;
 })(typeof window !== "undefined" ? window : globalThis);
+
+(function () {
+  const b = window.EPC_BRAND && window.EPC_BRAND["kawasaki-id"];
+  if (!b) return;
+  b.highlightOffsetX = 0;
+  b.highlightExpandLeft = 0;
+})();
+
+(function () {
+  if (typeof window === "undefined") return;
+  window.EPC_BRAND = window.EPC_BRAND || {};
+  const b = window.EPC_BRAND["kawasaki-id"];
+  if (b) {
+    b.highlightOffsetX = 0;
+    b.highlightExpandLeft = 0;
+  }
+})();

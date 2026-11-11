@@ -117,3 +117,10 @@
   if (typeof global.extractTitleIndonesianOrEn !== "function") global.extractTitleIndonesianOrEn = extractTitleIndonesianOrEn;
   if (typeof global.extractTitleIndonesian !== "function") global.extractTitleIndonesian = extractTitleIndonesian;
 })(typeof window !== "undefined" ? window : globalThis);
+
+(function () {
+  const b = window.EPC_BRAND && window.EPC_BRAND["honda-id"];
+  if (!b) return;
+  b.highlightOffsetX = 0;
+  b.highlightExpandLeft = 0;
+})();

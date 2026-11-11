@@ -64,3 +64,10 @@
   if (typeof global.preferCompleteYamahaKey === "undefined" && typeof preferCompleteYamahaKey === "function") global.preferCompleteYamahaKey = preferCompleteYamahaKey;
   if (typeof global.extractTitleYamaha === "undefined" && typeof extractTitleYamaha === "function") global.extractTitleYamaha = extractTitleYamaha;
 })(typeof window !== "undefined" ? window : globalThis);
+
+(function () {
+  const b = window.EPC_BRAND && window.EPC_BRAND["yamaha"];
+  if (!b) return;
+  b.highlightOffsetX = 0;
+  b.highlightExpandLeft = 0;
+})();

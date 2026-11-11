@@ -532,30 +532,10 @@ async function renderPagesInRange(centerIndex) {
     renderedPages.delete(idx);
   });
 
-  // V20.87 = V77 節奏：cleanup 不阻塞主流程（race 50ms），再 rAF + 100ms 後渲染
-  const cleanupPages = async () => {
-    if (!currentPdfDoc) return;
-    for (const idx of toRemove) {
-      try {
-        const page = await currentPdfDoc.getPage(idx + 1);
-        if (page && typeof page.cleanup === 'function') page.cleanup();
-      } catch (e) {}
-    }
-    try {
-      if (typeof currentPdfDoc.cleanup === 'function') currentPdfDoc.cleanup();
-    } catch (e) {}
-  };
-  const cleanupPromise = cleanupPages();
+  // cleanup 暫時停用（避免 startCleanup 錯誤干擾解析）
   navigateCount++;
-  if (navigateCount % 5 === 0 && currentPdfDoc && typeof currentPdfDoc.cleanup === 'function') {
-    try { currentPdfDoc.cleanup(); } catch (e) {}
-  }
   updateRamUsage();
-
-  await Promise.race([
-    cleanupPromise,
-    new Promise(r => setTimeout(r, 50))
-  ]);
+  await new Promise(r => setTimeout(r, 50));
   await new Promise(r => requestAnimationFrame(() => r()));
   if (gen !== renderGeneration) return;
 
@@ -1562,6 +1542,22 @@ function parsePageData(items, pageIndex, mode = 'yamaha') {
   let sortedLines = Object.keys(linesMap).map(y => ({ y: parseInt(y, 10), items: linesMap[y] })).sort((a, b) => b.y - a.y);
 
   let pageCategory = '';
+  // 優先使用各手冊的 extractTitle
+  if (mode === 'kawasaki' && typeof extractTitleKawasaki === 'function') {
+    pageCategory = extractTitleKawasaki(items, 0, '') || '';
+  } else if (mode === 'yamaha' && typeof extractTitleYamaha === 'function') {
+    pageCategory = extractTitleYamaha(items, 0, '') || '';
+  } else if (mode === 'honda') {
+    const loc = (typeof hondaLocale !== 'undefined' && hondaLocale) ? hondaLocale : 'jp';
+    if ((loc === 'id' || loc === 'en') && typeof extractTitleIndonesianOrEn === 'function') {
+      pageCategory = extractTitleIndonesianOrEn(items, 0, '') || '';
+    } else if (typeof extractTitleJapanese === 'function') {
+      pageCategory = extractTitleJapanese(items, 0, '') || '';
+    }
+  }
+  if (pageCategory && pageCategory.length >= 3 && !/^第\s*\d+\s*頁$/.test(pageCategory)) {
+    // 已有品牌標題，跳過通用迴圈
+  } else {
   
   for (let i = 0; i < sortedLines.length; i++) {
     const lineItems = sortedLines[i].items;
@@ -1623,6 +1619,7 @@ function parsePageData(items, pageIndex, mode = 'yamaha') {
       }
     }
   }
+  } // end else (no brand title)
 
   // V20.71：旋轉印尼頁標題 — F-10 / STEERING STEM 常為不同文字塊
   if (!pageCategory && mode === 'honda') {
@@ -1665,7 +1662,11 @@ function parsePageData(items, pageIndex, mode = 'yamaha') {
 
   // V20.113：川崎整頁列解析（泰文／印尼表）
   if (mode === 'kawasaki') {
-    const ks = parseKawasakiItems(items, pageCategory);
+    // 依語系呼叫對應解析
+    const parser = (typeof kawasakiLocale !== 'undefined' && kawasakiLocale === 'th' && window.EPC_BRAND && window.EPC_BRAND['kawasaki-th'] && window.EPC_BRAND['kawasaki-th'].parseItems)
+      ? window.EPC_BRAND['kawasaki-th'].parseItems
+      : parseKawasakiItems;
+    const ks = parser(items, pageCategory);
     ks.forEach(k => { if (!pageKeys.includes(k)) pageKeys.push(k); });
   }
 
@@ -2254,7 +2255,7 @@ function bindPartEvent(el, key) {
   el.title = `點擊加入：${key}\n品名：${info.name}\n數量：${info.qty}`;
   el.addEventListener('click', (e) => {
     e.stopPropagation();
-    addToPickList(key); 
+    addToPickList(key, currentPageIndex); 
     el.style.setProperty('background', 'rgba(76, 175, 80, 0.9)', 'important');
     el.style.setProperty('box-shadow', '0 0 0 3px rgba(76, 175, 80, 0.45)', 'important');
     setTimeout(() => {
@@ -2265,8 +2266,38 @@ function bindPartEvent(el, key) {
 }
 
 // V20.23：用 PDF textContent 的真實座標畫高亮，縮放時與圖面比例一致
+
+function getBrandHighlightOptions(mode) {
+  const B = (typeof window !== "undefined" && window.EPC_BRAND) ? window.EPC_BRAND : {};
+  let key = mode;
+  try {
+    if (mode === "kawasaki") {
+      key = (typeof kawasakiLocale !== "undefined" && kawasakiLocale === "th") ? "kawasaki-th" : "kawasaki-id";
+    } else if (mode === "honda") {
+      key = (typeof hondaLocale !== "undefined" && hondaLocale === "id") ? "honda-id" : "honda-jp";
+    }
+  } catch (e) {}
+  const b = B[key] || B[mode] || {};
+  return {
+    brandKey: key,
+    offsetX: (typeof b.highlightOffsetX === "number") ? b.highlightOffsetX : 0,
+    expandLeft: (typeof b.highlightExpandLeft === "number") ? b.highlightExpandLeft : 0,
+    custom: (typeof b.highlight === "function") ? b.highlight : null
+  };
+}
+
 function highlightPartNumbersFromContent(pageDiv, textContent, viewport, mode = 'yamaha') {
   if (!textContent || !textContent.items || !textContent.items.length) return;
+  // 品牌檔可提供專用高亮；app.js 只負責畫布與事件綁定
+  const hlOpts = getBrandHighlightOptions(mode);
+  if (hlOpts.custom) {
+    try {
+      const handled = hlOpts.custom(pageDiv, textContent, viewport, {
+        partInfoMap, pagePartKeys, bindPartEvent, normalizePartNo, pdfjsLib
+      });
+      if (handled !== false) return;
+    } catch (e) { console.warn('brand highlight', e); }
+  }
 
   let regexSource = HONDA_PART_REGEX.source;
   if (mode === 'kawasaki') regexSource = KAWASAKI_PART_REGEX.source;
@@ -2488,7 +2519,11 @@ function highlightPartNumbersFromContent(pageDiv, textContent, viewport, mode = 
       let bh = Math.max(fontH * 1.15, 11);
       // 強制橫向
       if (bh > bw) { const c = (minX + maxX) / 2; bw = Math.max(bw, fontH * 0.55 * key.length); minX = c - bw / 2; }
-      const left = minX;
+      // 品牌檔控制：kawasaki-th offsetX=-50（向左），expandLeft=50（加寬保持右緣）
+      const offX = hlOpts.offsetX || 0;
+      const expL = hlOpts.expandLeft || 0;
+      const left = minX + offX;
+      const drawW = bw + expL;
       const top = tx0[5] - bh * 0.85;
       const dedupe = key + '@' + Math.round(left) + '@' + Math.round(top);
       if (seen.has(dedupe)) continue;
@@ -2505,12 +2540,12 @@ function highlightPartNumbersFromContent(pageDiv, textContent, viewport, mode = 
         }
       } catch (e) {}
 
-      ctx.fillRect(left, top, bw, bh);
+      ctx.fillRect(left, top, drawW, bh);
       const hit = document.createElement('div');
       hit.className = 'part-hit-box';
       hit.style.left = left + 'px';
       hit.style.top = top + 'px';
-      hit.style.width = bw + 'px';
+      hit.style.width = drawW + 'px';
       hit.style.height = bh + 'px';
       hit.dataset.partKey = key;
       pageDiv.appendChild(hit);
@@ -2984,7 +3019,7 @@ function renderPartList(mode = 'page', pageIdx = 0, scrollToTop = false) {
     row.title = '點擊：跳至 PDF 位置';
   };
   const bindBtn = (btn) => {
-    btn.addEventListener('click', e => { e.stopPropagation(); addToPickList(btn.dataset.add); });
+    btn.addEventListener('click', e => { e.stopPropagation(); addToPickList(btn.dataset.add, currentPageIndex); });
   };
 
   const makeRowHtml = (itemOrKey) => {
@@ -3032,13 +3067,15 @@ function renderPartList(mode = 'page', pageIdx = 0, scrollToTop = false) {
 $('partSearch').addEventListener('input', () => renderPartList(currentSelectValue === 'all' ? 'all' : 'page', currentPageIndex));
 
 /* ================= PickList ================= */
-function addToPickList(key) {
+function addToPickList(key, pageIdx) {
   if (!key) return;
   if (currentMode === 'kawasaki') key = sanitizeKawasakiKey(key);
   if (currentMode === 'kawasaki' && !isValidKawasakiPartNo(key)) return;
+  // 用 pageIndex 分開同零件不同頁
+  const pIdx = (pageIdx != null) ? pageIdx : (typeof currentPageIndex !== 'undefined' ? currentPageIndex : 0);
+  const pickKey = key + '@p' + pIdx;
   let info = partInfoMap.get(key);
   if (!info) {
-    // 找前綴相同且有名稱的
     for (const [k, v] of partInfoMap.entries()) {
       if (k === key || k.startsWith(key) || key.startsWith(k.split('-').slice(0, 2).join('-'))) {
         if (v && v.name && v.name !== '（無名稱）') { info = { ...v }; break; }
@@ -3046,8 +3083,8 @@ function addToPickList(key) {
     }
   }
   if (!info) info = { name: '（無名稱）', qty: 1, category: '未分類', itemNo: '' };
-  if (pickList.has(key)) pickList.get(key).qty += (info.qty || 1);
-  else pickList.set(key, { name: info.name || '（無名稱）', qty: info.qty || 1, category: info.category || '未分類', itemNo: info.itemNo || '' });
+  if (pickList.has(pickKey)) pickList.get(pickKey).qty += (info.qty || 1);
+  else pickList.set(pickKey, { partKey: key, pageIndex: pIdx, name: info.name || '（無名稱）', qty: info.qty || 1, category: info.category || '未分類', itemNo: info.itemNo || '' });
   renderPickList();
 }
 
@@ -3083,24 +3120,26 @@ function renderPickList() {
     $('pickSummary').textContent = ''; updatePartButtons(); return;
   }
   let html = '', totalQty = 0;
-  for (const [key, data] of pickList) {
+  for (const [pickKey, data] of pickList) {
     totalQty += data.qty;
+    const partKey = data.partKey || pickKey.split('@p')[0];
+    const pIdx = data.pageIndex != null ? data.pageIndex : 0;
     const itemPrefix = data.itemNo ? `<span style="color:#94a3b8;font-size:12px;margin-right:6px;">[${esc(data.itemNo)}]</span>` : '';
-    const sel = key === selectedKey ? ' selected' : '';
-    html += `<div class="pick-item${sel}" data-key="${esc(key)}" title="點擊：跳至 PDF 並藍色高亮">
+    const sel = pickKey === selectedKey ? ' selected' : '';
+    html += `<div class="pick-item${sel}" data-key="${esc(pickKey)}" data-part="${esc(partKey)}" data-page="${pIdx}" title="點擊：跳至第 ${pIdx+1} 頁並藍色高亮">
       <div class="pick-item-top">
         <div>
-          <div class="pk-no">${esc(key)}</div>
+          <div class="pk-no">${esc(partKey)}</div>
           <div class="pk-name">${itemPrefix}${esc(data.name)}</div>
-          <span class="pk-cat">${esc(data.category)}</span>
+          <span class="pk-cat">${esc(data.category)} · 第 ${pIdx+1} 頁</span>
         </div>
-        <button class="del-pk" data-del-pk="${esc(key)}" title="移除">✕</button>
+        <button class="del-pk" data-del-pk="${esc(pickKey)}" title="移除">✕</button>
       </div>
       <div class="pick-item-bottom">
         <div class="pick-qty">
-          <button data-pk-dec="${esc(key)}">−</button>
-          <input type="number" min="1" value="${data.qty}" data-pk-input="${esc(key)}">
-          <button data-pk-inc="${esc(key)}">+</button>
+          <button data-pk-dec="${esc(pickKey)}">−</button>
+          <input type="number" min="1" value="${data.qty}" data-pk-input="${esc(pickKey)}">
+          <button data-pk-inc="${esc(pickKey)}">+</button>
         </div>
       </div>
     </div>`;
@@ -3112,10 +3151,17 @@ function renderPickList() {
   box.querySelectorAll('.pick-item').forEach(row => {
     row.addEventListener('click', e => {
       if (e.target.closest('.del-pk, .pick-qty, button, input')) return;
-      const key = row.dataset.key;
-      if (!key) return;
-      selectedKey = key;
-      jumpToPart(key);
+      const pickKey = row.dataset.key;
+      const partKey = row.dataset.part || pickKey;
+      const pIdx = parseInt(row.dataset.page, 10);
+      if (!pickKey) return;
+      selectedKey = pickKey;
+      if (!isNaN(pIdx)) {
+        // 先跳到該頁
+        const pageDiv = container.querySelector(`.page-container[data-page-index="${pIdx}"]`);
+        if (pageDiv) pageDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      jumpToPart(partKey);
       // 同步選中樣式
       box.querySelectorAll('.pick-item').forEach(r => r.classList.toggle('selected', r.dataset.key === key));
     });
@@ -3233,7 +3279,32 @@ $('btnExcel').addEventListener('click', () => {
     layout.classList.toggle('panel-collapsed');
     syncIcon();
     // 不呼叫 fitWidth，避免收合／展開時 PDF 畫面倍率變動
-  });
+  
+// 
+;
+// 手掌／三指拖曳移動 PDF
+(function() {
+  const container = document.getElementById('pdfContainer');
+  if (!container) return;
+  let palmStart = null;
+  container.addEventListener('touchstart', e => {
+    if (e.touches.length >= 3) {
+      palmStart = { x: e.touches[0].clientX, y: e.touches[0].clientY, sx: container.scrollLeft, sy: container.scrollTop };
+      e.preventDefault();
+    }
+  }, { passive: false });
+  container.addEventListener('touchmove', e => {
+    if (palmStart && e.touches.length >= 3) {
+      const dx = e.touches[0].clientX - palmStart.x;
+      const dy = e.touches[0].clientY - palmStart.y;
+      container.scrollLeft = palmStart.sx - dx;
+      container.scrollTop = palmStart.sy - dy;
+      e.preventDefault();
+    }
+  }, { passive: false });
+  container.addEventListener('touchend', () => { palmStart = null; });
+})();
+});
   window.addEventListener('resize', syncIcon);
   syncIcon();
 })();

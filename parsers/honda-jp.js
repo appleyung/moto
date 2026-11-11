@@ -115,3 +115,10 @@
   if (typeof global.isJapaneseTitleJunk === "undefined" && typeof isJapaneseTitleJunk === "function") global.isJapaneseTitleJunk = isJapaneseTitleJunk;
   if (typeof global.extractTitleJapanese === "undefined" && typeof extractTitleJapanese === "function") global.extractTitleJapanese = extractTitleJapanese;
 })(typeof window !== "undefined" ? window : globalThis);
+
+(function () {
+  const b = window.EPC_BRAND && window.EPC_BRAND["honda-jp"];
+  if (!b) return;
+  b.highlightOffsetX = 0;
+  b.highlightExpandLeft = 0;
+})();
