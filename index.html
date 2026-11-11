@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>零件圖 PDF → EPC 模式 (EPC_V30_3 upload-fix)</title>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+</head>
+<body>
+
+<div id="dragOverlay">
+  <div class="icon">📥</div>
+  <div>放開以載入 PDF 檔案</div>
+</div>
+
+<header>
+  <div style="display:flex;align-items:baseline;">
+    <h1>零件圖 PDF → EPC 模式 (V30.3)</h1>
+    <span class="sub">支援多語言解析與翻譯</span>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="left-pane">
+    <div class="epc-toolbar">
+      <div class="search-group">
+        <input type="search" id="partSearch" placeholder="搜尋零件號碼或名稱...">
+      </div>
+
+      <!-- V20.31：置頂／回第 1 頁 -->
+      <button type="button" id="btnToTop" class="btn-to-top" title="回到第一頁" aria-label="回到第一頁">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M5 5h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M12 19V9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M7.5 12.5L12 8l4.5 4.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      
+      <!-- 🎯 記憶體/快取監控指示器 -->
+      <div id="ramUsage" class="ram-indicator" title="記憶體用量">快取:0M</div>
+
+      <!-- 🎯 縮小後的縮放控制項 -->
+      <div class="pdf-controls">
+        <button id="btnZoomOut" title="縮小">−</button>
+        <div class="zoom-input-group">
+          <input type="number" id="zoomText" min="20" max="500" step="10" value="100">
+          <span>%</span>
+        </div>
+        <button id="btnZoomIn" title="放大">+</button>
+      </div>
+
+      <!-- 鎖匙（解鎖）在左、PDF 上傳在最右 -->
+      <button type="button" class="toolbar-icon-btn" id="btnDecrypt" title="解鎖 PDF" aria-label="解鎖 PDF">🔑</button>
+      <button type="button" class="toolbar-icon-btn" id="btnUploadPdf" title="上傳 PDF" aria-label="上傳 PDF"
+        onclick="(function(){var i=document.getElementById('fileInputAuto'); if(i) i.click();})()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M14 2H6C4.89543 2 4 4 4 4V20C4 21.1046 4.89543 22 6 22H18C19.1046 22 20 21.1046 20 20V8L14 2Z" fill="#dc2626"/>
+          <path d="M14 2V8H20" stroke="white" stroke-width="1.5"/>
+          <text x="4.5" y="17" font-family="Arial" font-size="7" font-weight="bold" fill="white">PDF</text>
+        </svg>
+      </button>
+      
+      <input type="file" id="fileInputAuto" accept=".pdf,application/pdf" style="display:none;">
+      <input type="file" id="fileInputDecrypt" accept=".pdf,application/pdf" style="display:none;">
+    </div>
+
+    <div class="pdf-viewport-wrapper">
+      <div class="pdf-viewport" id="pdfViewport">
+        <div id="emptyState">
+          <p>📄</p>
+          <span>請拖曳 PDF 到此處，或點右上角 PDF 圖示上傳</span>
+        </div>
+        <div class="pdf-scale-wrapper" id="pdfScaleWrapper">
+          <div class="pdf-container" id="pdfContainer"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <button type="button" class="sidebar-collapse-btn" id="btnSidebarCollapse" title="收合／展開清單" aria-label="收合清單">▼</button>
+    <div class="sidebar-tabs">
+      <button class="sidebar-tab active" data-view="list">📋 零件清單<span class="cnt" id="listCount">0</span></button>
+      <button class="sidebar-tab" data-view="pick">🛒 PickList<span class="cnt" id="pickCount">0</span></button>
+    </div>
+
+    <div class="sidebar-body">
+      <div class="panel-view active" id="viewList">
+        <div class="list-page-controls">
+          <button id="btnPrevPage" class="nav-btn" title="上一頁">◀</button>
+          <div class="custom-select-wrapper" id="customSelectWrapper">
+            <div class="custom-select-trigger" id="customSelectTrigger">⭐ 顯示所有零件</div>
+            <div class="custom-options" id="customOptions"></div>
+          </div>
+          <button id="btnNextPage" class="nav-btn" title="下一頁">▶</button>
+        </div>
+        <div class="part-list" id="partList"></div>
+      </div>
+
+      <div class="panel-view" id="viewPick">
+        <div class="picklist-list" id="pickListBox">
+          <div class="pick-empty"><strong>PickList 是空的</strong>從「零件清單」或圖面點擊加入</div>
+        </div>
+        <div class="pick-footer">
+          <div class="pick-summary" id="pickSummary"></div>
+          <div class="pick-actions">
+            <button class="btn-outline-danger" id="btnClearPick" disabled>🗑️ 清空</button>
+            <button class="btn-main" id="btnExportPick">匯出清單</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="loading">處理 PDF 中，請稍候…</div>
+
+<div id="modal" class="modal">
+  <div class="modal-box" id="modalBox">
+    <div class="modal-header">
+      <h3 id="modalHeading">PickList 匯出</h3>
+      <button class="modal-close-btn" id="btnClose">✕</button>
+    </div>
+    <div class="modal-body-wrap"><div id="modalBody"></div></div>
+    <div class="modal-actions">
+      <button id="btnCopy" class="btn-success">📋 複製文字</button>
+      <button id="btnPrint">🖨️ 列印 / 存 PDF</button>
+      <button id="btnExcel" class="btn-primary">📊 下載 CSV</button>
+    </div>
+  </div>
+</div>
+
+<!-- i18n (each file optional) -->
+<script src="i18n/transfer-eng.js"></script>
+<script src="i18n/transfer-jp.js"></script>
+<script src="i18n/transfer-id.js"></script>
+<script src="i18n/transfer-th.js"></script>
+
+<!-- Brand parsers (each file optional; missing = that brand degrades gracefully) -->
+<script src="parsers/yamaha.js"></script>
+<script src="parsers/honda-jp.js"></script>
+<script src="parsers/honda-id.js"></script>
+<script src="parsers/kawasaki-id.js"></script>
+<script src="parsers/kawasaki-th.js"></script>
+
+<script src="app.js"></script>
+</body>
+</html>
