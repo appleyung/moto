@@ -3,11 +3,13 @@
   "use strict";
   global.EPC_BRAND = global.EPC_BRAND || {};
 
-  var YAMAHA_PART_REGEX = /\b[0-9A-Z]{3,5}\s*-\s*[0-9A-Z]{2,6}(?:\s*-\s*[0-9A-Z]{1,4}){0,2}\b/gi;
+  // 零件號格式：3-5-2 (B6H-E5461-10)、5-5 (90387-08821)、3-5-2-2 (B6H-E5461-10-00)
+  var YAMAHA_PART_REGEX = /\b[0-9A-Z]{3,5}\s*-\s*[0-9A-Z]{4,6}(?:\s*-\s*[0-9A-Z]{1,3}){0,2}\b/gi;
   function isValidYamahaPartNo(p) {
     const s = normalizePartNo(p || '');
     if (!s || s.length < 8) return false;
-    if (!/^[0-9A-Z]{3,5}-[0-9A-Z]{2,6}(-[0-9A-Z]{1,4}){0,2}$/.test(s)) return false;
+    // 支援 3-5-2、5-5、3-5-2-2 格式
+    if (!/^[0-9A-Z]{3,5}-[0-9A-Z]{4,6}(-[0-9A-Z]{1,3}){0,2}$/.test(s)) return false;
     const first = s.split('-')[0];
     // 純 1～2 位數字開頭 = 缺字母前綴的殘段
     if (/^\d{1,2}$/.test(first)) return false;
@@ -25,6 +27,18 @@
       if (ok.length > k.length && ok.endsWith(k.replace(/^[A-Z]/, ''))) return false;
     }
     return true;
+  }
+  function cleanYamahaName(name, partNo) {
+    if (!name || !partNo) return name || '';
+    let result = String(name).trim();
+    const key = String(partNo).replace(/[–—]/g, '-').trim();
+    // 移除零件號前綴
+    if (result.toUpperCase().startsWith(key.toUpperCase())) {
+      result = result.substring(key.length).trim();
+    }
+    // 移除開頭的標點符號
+    result = result.replace(/^[\s\-.:：.]+/, '').trim();
+    return result;
   }
   function extractTitleYamaha(items, pageIndex, fallback) {
     const allStr = (items || []).map(it => String(it.str || '').trim()).filter(Boolean);
@@ -56,6 +70,7 @@
     extractTitleYamaha: typeof extractTitleYamaha === "function" ? extractTitleYamaha : null,
     isValid: typeof isValidYamahaPartNo === "function" ? isValidYamahaPartNo : null,
     extractTitle: typeof extractTitleYamaha === "function" ? extractTitleYamaha : null,
+    cleanName: typeof cleanYamahaName === "function" ? cleanYamahaName : null,
     PART_REGEX: typeof YAMAHA_PART_REGEX !== "undefined" ? YAMAHA_PART_REGEX : null,
   };
   // Install globals only when missing — safe if another brand already defined shared names

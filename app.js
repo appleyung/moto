@@ -1937,6 +1937,15 @@ function parsePageData(items, pageIndex, mode = 'yamaha') {
           }
           // 去掉誤黏的數量
           lastPartName = (lastPartName || '').replace(/\s+\d{1,3}\s*$/, '').trim();
+          // 移除零件號前綴（更積極）
+          const partNoClean = part.partNo.replace(/[–—]/g, '-');
+          const nameUpper = lastPartName.toUpperCase();
+          const keyUpper = partNoClean.toUpperCase();
+          if (nameUpper.startsWith(keyUpper)) {
+            lastPartName = lastPartName.substring(partNoClean.length).replace(/^[\s\-.:：.]+/, '').trim();
+          }
+          // 再次檢查並清理
+          lastPartName = lastPartName.replace(new RegExp('^' + partNoClean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s\\-.:：]*', 'i'), '').trim();
           
           if (!isValidYamahaPartNo(part.partNo)) continue;
           if (!partInfoMap.has(part.partNo)) partInfoMap.set(part.partNo, { name: lastPartName || '（無名稱）', rawName: lastPartName, qty: qty || 1, category: pageCategory || '未分類', itemNo: detectedItemNo });
@@ -3139,7 +3148,11 @@ function setPickQty(key, qty) {
 function updatePartButtons() {
   document.querySelectorAll('.add-btn').forEach(btn => {
     const key = btn.dataset.add;
-    const pickData = pickList.get(key);
+    let pickData = null;
+    for (const [k, v] of pickList) {
+      const cleanKey = v.partKey || k.split('@p')[0];
+      if (cleanKey === key) { pickData = v; break; }
+    }
     if (pickData) { btn.textContent = `✓ 已加入 (${pickData.qty})`; btn.classList.add('added'); }
     else { btn.textContent = '＋ PickList'; btn.classList.remove('added'); }
   });
@@ -3252,14 +3265,10 @@ modal.addEventListener('mousedown', e => { if (e.target === modal) modal.classLi
 
 function buildModalContent() {
   let totalQty = 0, rows = '';
-  for (const [key, d] of pickList) { 
-    totalQty += d.qty; 
-    const cleanKey = (d.partKey || key.split('@p')[0]).replace(/[–—]/g, '-');
-    let pureName = (d.name || '').trim();
-    if (pureName.toUpperCase().startsWith(cleanKey.toUpperCase())) {
-      pureName = pureName.substring(cleanKey.length).replace(/^[\s\-]+/, '').trim();
-    }
-    rows += `<tr><td>${esc(cleanKey)}</td><td>${esc(pureName || d.name)}</td><td>${d.qty}</td></tr>`; 
+  for (const [key, d] of pickList) {
+    totalQty += d.qty;
+    const displayKey = d.partKey || key.split('@p')[0];
+    rows += `<tr><td>${esc(displayKey)}</td><td>${esc(d.name)}</td><td>${d.qty}</td></tr>`;
   }
   $('modalBody').innerHTML = `
     <table class="modal-table">
