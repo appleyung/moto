@@ -1917,35 +1917,21 @@ function parsePageData(items, pageIndex, mode = 'yamaha') {
             if (trailingNum) { qty = parseInt(trailingNum[1], 10); lastItem.str = lastItem.str.replace(/(\d+)\s*$/, '').trim(); }
           }
           
-          let nameItems = [];
-          for (let i = 0; i < regionItems.length; i++) {
-            if (i === qtyItemIdx) continue;
-            const str = regionItems[i].str.trim();
-            if (str.length > 0 && !str.includes(part.partNo) && !part.partNo.includes(str)) nameItems.push(str);
-          }
-          let lastPartName = translateText(nameItems.join(' ').replace(/\s+/g, ' ').trim());
-          // V20.99：同列字串後段中文／英文品名（區域抓空時）
-          if (!lastPartName || lastPartName.length < 1) {
-            const after = cleanStr.slice(part.end).replace(new RegExp(YAMAHA_PART_REGEX.source, 'gi'), ' ');
-            const cn = after.match(/[\u4e00-\u9fff]{2,20}/);
-            if (cn) lastPartName = cn[0];
-            else {
-              const en = after.match(/[A-Za-z][A-Za-z0-9 \/\-]{2,30}/);
-              if (en) lastPartName = en[0].trim();
+          // 使用品牌專用的名稱提取函數
+          let lastPartName = '';
+          if (window.EPC_BRAND && window.EPC_BRAND['yamaha'] && window.EPC_BRAND['yamaha'].extractName) {
+            lastPartName = window.EPC_BRAND['yamaha'].extractName(regionItems, part.partNo, partX, nextPartX);
+          } else {
+            // 備用：簡單提取
+            let nameItems = [];
+            for (let i = 0; i < regionItems.length; i++) {
+              if (i === qtyItemIdx) continue;
+              const str = regionItems[i].str.trim();
+              if (str.length > 0 && !str.includes(part.partNo)) nameItems.push(str);
             }
-            lastPartName = translateText((lastPartName || '').replace(/\s+/g, ' ').trim());
+            lastPartName = nameItems.join(' ').replace(/\s+/g, ' ').trim();
           }
-          // 去掉誤黏的數量
-          lastPartName = (lastPartName || '').replace(/\s+\d{1,3}\s*$/, '').trim();
-          // 移除零件號前綴（更積極）
-          const partNoClean = part.partNo.replace(/[–—]/g, '-');
-          const nameUpper = lastPartName.toUpperCase();
-          const keyUpper = partNoClean.toUpperCase();
-          if (nameUpper.startsWith(keyUpper)) {
-            lastPartName = lastPartName.substring(partNoClean.length).replace(/^[\s\-.:：.]+/, '').trim();
-          }
-          // 再次檢查並清理
-          lastPartName = lastPartName.replace(new RegExp('^' + partNoClean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s\\-.:：]*', 'i'), '').trim();
+          lastPartName = translateText(lastPartName);
           
           if (!isValidYamahaPartNo(part.partNo)) continue;
           if (!partInfoMap.has(part.partNo)) partInfoMap.set(part.partNo, { name: lastPartName || '（無名稱）', rawName: lastPartName, qty: qty || 1, category: pageCategory || '未分類', itemNo: detectedItemNo });
