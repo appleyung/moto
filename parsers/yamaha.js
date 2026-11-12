@@ -40,6 +40,27 @@
     result = result.replace(/^[\s\-.:：.]+/, '').trim();
     return result;
   }
+  // Yamaha 專用名稱提取：從零件號右邊提取名稱，自動移除零件號前綴
+  function extractNameYamaha(lineItems, partNo, partX, nextPartX) {
+    let nameItems = [];
+    for (let i = 0; i < lineItems.length; i++) {
+      const item = lineItems[i];
+      const itemX = item.transform[4] || 0;
+      if (itemX < partX +5) continue; //抓零件號右邊+5位置的名
+      if (itemX >= nextPartX) break;
+      const str = (item.str || '').trim();
+      if (str.length > 0 && !str.includes(partNo) && !partNo.includes(str)) {
+        nameItems.push(str);
+      }
+    }
+    let name = nameItems.join(' ').replace(/\s+/g, ' ').trim();
+    // 移除零件號前綴
+    const key = partNo.replace(/[–—]/g, '-');
+    if (name.toUpperCase().startsWith(key.toUpperCase())) {
+      name = name.substring(key.length).replace(/^[\s\-.:：.]+/, '').trim();
+    }
+    return name || '（無名稱）';
+  }
   function extractTitleYamaha(items, pageIndex, fallback) {
     const allStr = (items || []).map(it => String(it.str || '').trim()).filter(Boolean);
     const joined = allStr.join(' ');
@@ -71,6 +92,7 @@
     isValid: typeof isValidYamahaPartNo === "function" ? isValidYamahaPartNo : null,
     extractTitle: typeof extractTitleYamaha === "function" ? extractTitleYamaha : null,
     cleanName: typeof cleanYamahaName === "function" ? cleanYamahaName : null,
+    extractName: typeof extractNameYamaha === "function" ? extractNameYamaha : null,
     PART_REGEX: typeof YAMAHA_PART_REGEX !== "undefined" ? YAMAHA_PART_REGEX : null,
   };
   // Install globals only when missing — safe if another brand already defined shared names
