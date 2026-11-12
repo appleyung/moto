@@ -117,7 +117,7 @@ function updateRamUsage() {
     `DOM：${(domBytes/1048576).toFixed(2)} M\n` +
     `應用資料：${(dataBytes/1048576).toFixed(2)} M`;
 }
-setInterval(updateRamUsage, 1500);
+// setInterval(updateRamUsage, 1000); // disabled
 
 
 /* ================= 下拉選單邏輯 ================= */
@@ -998,7 +998,7 @@ async function detectManualKind(pdf, fileName) {
       sample += ' ' + (tc.items || []).map(x => x.str || '').join(' ');
     } catch (e) {}
   }
-  let scoreHondaId = 0, scoreHondaJp = 0, scoreYamaha = 0, scoreKawasakiTh = 0, scoreKawasakiId = 0;
+  let scoreHondaId = 0, scoreHondaJp = 0, scoreYamaha = 0, scoreYamahaLoose = 0, scoreKawasakiTh = 0, scoreKawasakiId = 0;
   const add = (score, re, w, cap) => { const m = sample.match(re); return score + (m ? w * Math.min(m.length, cap) : 0); };
   scoreHondaId = add(scoreHondaId, /Deskripsi/gi, 8, 6);
   scoreHondaId = add(scoreHondaId, /Jumlah/gi, 6, 6);
@@ -1021,6 +1021,13 @@ async function detectManualKind(pdf, fileName) {
   scoreYamaha = add(scoreYamaha, /部品名稱/g, 5, 6);
   if (scoreHondaId >= 10) scoreYamaha = Math.max(0, scoreYamaha - 12);
   if (scoreHondaJp >= 10) scoreYamaha = Math.max(0, scoreYamaha - 8);
+
+  // Yamaha 零散手冊（XMAX 等）
+  scoreYamahaLoose = add(scoreYamahaLoose, /Fig\.\s*\d+\s+[A-Z]/gi, 8, 8);
+  scoreYamahaLoose = add(scoreYamahaLoose, /Ref\.\s*No\./gi, 6, 4);
+  scoreYamahaLoose = add(scoreYamahaLoose, /Product\s*Code:/gi, 4, 2);
+  scoreYamahaLoose = add(scoreYamahaLoose, /Colour\s*Type:/gi, 4, 2);
+  if (scoreYamahaLoose >= 10) scoreYamaha = Math.max(0, scoreYamaha - 6);
 
   // Kawasaki 品牌與版式（權重提高，避免誤判 Yamaha）
   const hasKawasakiBrand = /Kawasaki/i.test(sample);
@@ -1054,6 +1061,7 @@ async function detectManualKind(pdf, fileName) {
     { kind: 'honda-id', mode: 'honda', locale: 'id', kLoc: 'en', score: scoreHondaId },
     { kind: 'honda-jp', mode: 'honda', locale: 'jp', kLoc: 'en', score: scoreHondaJp },
     { kind: 'yamaha', mode: 'yamaha', locale: 'en', kLoc: 'en', score: scoreYamaha },
+    { kind: 'yamaha-loose', mode: 'yamaha-loose', locale: 'en', kLoc: 'en', score: scoreYamahaLoose },
     { kind: 'kawasaki-th', mode: 'kawasaki', locale: 'en', kLoc: 'th', score: scoreKawasakiTh },
     { kind: 'kawasaki-id', mode: 'kawasaki', locale: 'en', kLoc: 'id', score: scoreKawasakiId },
   ].sort((a, b) => b.score - a.score);
@@ -1075,6 +1083,7 @@ async function detectManualKind(pdf, fileName) {
     { kind: 'honda-id', mode: 'honda', locale: 'id', kLoc: 'en', score: scoreHondaId },
     { kind: 'honda-jp', mode: 'honda', locale: 'jp', kLoc: 'en', score: scoreHondaJp },
     { kind: 'yamaha', mode: 'yamaha', locale: 'en', kLoc: 'en', score: scoreYamaha },
+    { kind: 'yamaha-loose', mode: 'yamaha-loose', locale: 'en', kLoc: 'en', score: scoreYamahaLoose },
     { kind: 'kawasaki-th', mode: 'kawasaki', locale: 'en', kLoc: 'th', score: scoreKawasakiTh },
     { kind: 'kawasaki-id', mode: 'kawasaki', locale: 'en', kLoc: 'id', score: scoreKawasakiId },
   ].sort((a, b) => b.score - a.score);
@@ -3067,6 +3076,38 @@ function renderPartList(mode = 'page', pageIdx = 0, scrollToTop = false) {
 $('partSearch').addEventListener('input', () => renderPartList(currentSelectValue === 'all' ? 'all' : 'page', currentPageIndex));
 
 /* ================= PickList ================= */
+
+// PickList 紅色項次標記
+function highlightPickListItems() {
+  if (currentMode !== 'yamaha') return;
+  const pageDiv = document.querySelector('.page-container[data-page-index="' + currentPageIndex + '"]');
+  if (!pageDiv) return;
+  // 移除舊的紅色標記
+  pageDiv.querySelectorAll('.pick-marker').forEach(el => el.remove());
+  // 取得本頁 PickList 的項次
+  const itemNos = new Set();
+  for (const [k, v] of pickList) {
+    if (v.pageIndex === currentPageIndex && v.itemNo) itemNos.add(String(v.itemNo));
+  }
+  if (!itemNos.size) return;
+  // 在圖上找項次數字並加紅框
+  const canvas = pageDiv.querySelector('canvas');
+  if (!canvas) return;
+  const items = pageDiv._textItems || [];
+  for (const it of items) {
+    const s = String(it.str || '').trim();
+    if (!itemNos.has(s)) continue;
+    if (!/^\d{1,3}$/.test(s)) continue;
+    const x = it.transform[4] || 0;
+    const y = it.transform[5] || 0;
+    // 只標記圖區（左邊，X < 300）
+    if (x > 300) continue;
+    const marker = document.createElement('div');
+    marker.className = 'pick-marker';
+    marker.style.cssText = 'position:absolute;left:' + (x - 2) + 'px;top:' + (y - 10) + 'px;width:16px;height:14px;border:2px solid #e11d48;border-radius:2px;pointer-events:none;z-index:5;';
+    pageDiv.appendChild(marker);
+  }
+}
 function addToPickList(key, pageIdx) {
   if (!key) return;
   if (currentMode === 'kawasaki') key = sanitizeKawasakiKey(key);
@@ -3086,6 +3127,7 @@ function addToPickList(key, pageIdx) {
   if (pickList.has(pickKey)) pickList.get(pickKey).qty += (info.qty || 1);
   else pickList.set(pickKey, { partKey: key, pageIndex: pIdx, name: info.name || '（無名稱）', qty: info.qty || 1, category: info.category || '未分類', itemNo: info.itemNo || '' });
   renderPickList();
+  if (typeof highlightPickListItems === 'function') highlightPickListItems();
 }
 
 function setPickQty(key, qty) {
@@ -3225,20 +3267,17 @@ async function copyText(text) {
   catch { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;'; document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch {} document.body.removeChild(ta); return ok; }
 }
 $('btnCopy').addEventListener('click', async () => {
-  // V20.101：複製不含表頭；品名去掉重複零件號；數量 xN
+  // 複製不含表頭；品名去掉重複零件號；數量 xN
   let t = '';
   for (const [k, d] of pickList) {
+    const cleanKey = (d.partKey || k.split('@p')[0]).replace(/[–—]/g, '-');
     let pureName = (d.name || '').trim();
-    const kNorm = k.replace(/[–—]/g, '-');
     let nameNorm = pureName.replace(/[–—]/g, '-');
-    if (nameNorm.toUpperCase().startsWith(kNorm.toUpperCase())) {
-      pureName = nameNorm.substring(kNorm.length).replace(/^[\s\-]+/, '').trim();
-    } else {
-      const re = new RegExp('^' + kNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/-/g, '[-–—]') + '[\\s\\-–—]*', 'i');
-      pureName = pureName.replace(re, '').trim();
+    if (nameNorm.toUpperCase().startsWith(cleanKey.toUpperCase())) {
+      pureName = nameNorm.substring(cleanKey.length).replace(/^[\s\-]+/, '').trim();
     }
-    if (!pureName) pureName = (d.name || '').replace(/[–—]/g, '-').replace(new RegExp('^' + kNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[\\s\\-]*', 'i'), '').trim() || d.name || '';
-    t += `${kNorm}\t${pureName}\tx${d.qty}\n`;
+    if (!pureName) pureName = d.name || '';
+    t += `${cleanKey}\t${pureName}\tx${d.qty}\n`;
   }
   const ok = await copyText(t), btn = $('btnCopy'), orig = btn.innerHTML;
   btn.innerHTML = ok ? '✅ 已複製' : '❌ 複製失敗';
@@ -3248,7 +3287,15 @@ $('btnPrint').addEventListener('click', () => window.print());
 $('btnExcel').addEventListener('click', () => {
   const csvEsc = v => { const s = String(v ?? ''); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
   let csv = '零件號碼,產品名稱,數量\n', total = 0;
-  for (const [k, d] of pickList) { total += d.qty; csv += [k, d.name, d.qty].map(csvEsc).join(',') + '\n'; }
+  for (const [k, d] of pickList) { 
+    total += d.qty; 
+    const cleanKey = (d.partKey || k.split('@p')[0]).replace(/[–—]/g, '-');
+    let pureName = (d.name || '').trim();
+    if (pureName.toUpperCase().startsWith(cleanKey.toUpperCase())) {
+      pureName = pureName.substring(cleanKey.length).replace(/^[\s\-]+/, '').trim();
+    }
+    csv += [cleanKey, pureName || d.name, d.qty].map(csvEsc).join(',') + '\n'; 
+  }
   csv += `,合計,${total}\n`;
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -3266,13 +3313,8 @@ $('btnExcel').addEventListener('click', () => {
   }
   function syncIcon() {
     const collapsed = layout.classList.contains('panel-collapsed');
-    if (isMobilePortrait()) {
-      btn.textContent = collapsed ? '▲' : '▼';
-      btn.title = collapsed ? '展開清單' : '收起清單（加大 PDF）';
-    } else {
-      btn.textContent = collapsed ? '◀' : '▶';
-      btn.title = collapsed ? '展開清單' : '收合清單';
-    }
+    btn.textContent = collapsed ? '↓' : '↑';
+    btn.title = collapsed ? '展開清單' : '收起清單';
   }
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -3313,3 +3355,67 @@ $('btnExcel').addEventListener('click', () => {
 renderPartList('page', 0, true);
 renderPickList();
 updateRamUsage();
+// 圖片上傳識別
+document.getElementById('btnUploadImage')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const menu = document.getElementById('uploadMenu');
+  if (menu) menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+});
+document.getElementById('btnUploadImg')?.addEventListener('click', () => {
+  document.getElementById('uploadMenu').style.display = 'none';
+  document.getElementById('fileInputImage')?.click();
+});
+document.getElementById('btnUploadMultiPdf')?.addEventListener('click', () => {
+  document.getElementById('uploadMenu').style.display = 'none';
+  document.getElementById('fileInputMultiPdf')?.click();
+});
+document.addEventListener('click', () => {
+  const menu = document.getElementById('uploadMenu');
+  if (menu) menu.style.display = 'none';
+});
+
+// 多 PDF 合併
+document.getElementById('fileInputMultiPdf')?.addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  if (files.length === 1) {
+    handleFiles(e.target.files, 'auto');
+    return;
+  }
+  // 合併多個 PDF
+  try {
+    const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
+    const merged = await PDFDocument.create();
+    for (const file of files) {
+      const bytes = await file.arrayBuffer();
+      const doc = await PDFDocument.load(bytes);
+      const pages = await merged.copyPages(doc, doc.getPageIndices());
+      pages.forEach(p => merged.addPage(p));
+    }
+    const mergedBytes = await merged.save();
+    const blob = new Blob([mergedBytes], { type: 'application/pdf' });
+    const mergedFile = new File([blob], 'merged.pdf', { type: 'application/pdf' });
+    handleFiles([mergedFile], 'auto');
+  } catch (err) {
+    alert('合併 PDF 失敗：' + err.message);
+  }
+  e.target.value = '';
+});
+document.getElementById('fileInputImage')?.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  // TODO: 圖片識別邏輯
+  console.log('圖片上傳:', file.name);
+  alert('圖片識別功能開發中：' + file.name);
+  e.target.value = '';
+});
+
+// 計算機按鈕
+document.getElementById('btnCalc')?.addEventListener('click', () => {
+  const calcW = Math.min(1100, screen.availWidth * 0.7);
+const calcH = Math.min(750, screen.availHeight * 0.7);
+const calcL = window.screenX + Math.max(50, (window.outerWidth - calcW) / 2);
+const calcT = window.screenY + Math.max(30, (window.outerHeight - calcH) / 3);
+const w = window.open('calc.html', 'calc', 'width=' + calcW + ',height=' + calcH + ',left=' + calcL + ',top=' + calcT + ',resizable=yes,scrollbars=yes');
+  if (!w) alert('請允許彈出視窗');
+});
