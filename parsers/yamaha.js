@@ -70,11 +70,11 @@
       let title = m[2].replace(/\s+/g, ' ').trim();
       title = title.replace(/(項次|部品番號|部品名稱|備註|數量|Qty|Ref).*$/i, '').trim();
       title = title.replace(/[\|．.].*$/, '').trim();
-      if (title.length >= 1 && title.length <= 30) return `${fallback}，FIG.${m[1]} ${title}`;
-      return `${fallback}，FIG.${m[1]}`;
+      if (title.length >= 1 && title.length <= 30) return `${fallback}FIG.${m[1]} ${title}`;
+      return `${fallback}FIG.${m[1]}`;
     }
     m = joined.match(/FIG\.\s*(\d+)/i);
-    if (m) return `${fallback}，FIG.${m[1]}`;
+    if (m) return `${fallback}FIG.${m[1]}`;
     // 無 FIG 時嘗試頁面頂部中文短標題
     for (const s of allStr) {
       if (/^[\u4e00-\u9fff]{2,12}$/.test(s) && !/項次|部品|備註|數量|頁/.test(s)) {
