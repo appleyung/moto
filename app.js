@@ -3252,7 +3252,15 @@ modal.addEventListener('mousedown', e => { if (e.target === modal) modal.classLi
 
 function buildModalContent() {
   let totalQty = 0, rows = '';
-  for (const [key, d] of pickList) { totalQty += d.qty; rows += `<tr><td>${esc(key)}</td><td>${esc(d.name)}</td><td>${d.qty}</td></tr>`; }
+  for (const [key, d] of pickList) { 
+    totalQty += d.qty; 
+    const cleanKey = (d.partKey || key.split('@p')[0]).replace(/[–—]/g, '-');
+    let pureName = (d.name || '').trim();
+    if (pureName.toUpperCase().startsWith(cleanKey.toUpperCase())) {
+      pureName = pureName.substring(cleanKey.length).replace(/^[\s\-]+/, '').trim();
+    }
+    rows += `<tr><td>${esc(cleanKey)}</td><td>${esc(pureName || d.name)}</td><td>${d.qty}</td></tr>`; 
+  }
   $('modalBody').innerHTML = `
     <table class="modal-table">
       <thead><tr><th>零件號碼</th><th>產品名稱</th><th>數量</th></tr></thead>
