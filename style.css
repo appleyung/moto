@@ -258,7 +258,7 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
     .epc-toolbar .pdf-controls button:first-child { grid-area: zoomminus !important; font-size: 14px !important; }
     .epc-toolbar .pdf-controls button:last-child { grid-area: zoomplus !important; font-size: 14px !important; }
     .epc-toolbar .pdf-controls .zoom-input-group { grid-area: zoomtext !important; background: #fff !important; }
-    .epc-toolbar .pdf-controls input { width: 100% !important; max-width: 32px !important; border: none !important; background: transparent !important; font-size: 12px !important; text-align: right !important; padding: 0 !important; }
+    .epc-toolbar .pdf-controls input { width: 100% !important; max-width: 32px !important; border: none !important; background: transparent !important; font-size: 12px !important; text-align: left !important; padding: 0 !important; }
     .epc-toolbar .pdf-controls span { font-size: 12px !important; margin-right: 2px !important; margin-left: 0 !important; }
 
     .epc-toolbar .brand-dropdown, .epc-toolbar .upload-dropdown { display: flex !important; width: 100% !important; height: 28px !important; position: relative !important; }
@@ -460,10 +460,10 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
     margin: 0 2px;
   }
   .epc-toolbar .pdf-controls input {
-    width: 36px;
+    width: 40px;
     border: none;
     background: transparent;
-    text-align: right;
+    text-align: left;
     font-size: 12px;
   }
 
