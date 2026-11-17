@@ -137,12 +137,19 @@
         let itemNo = '';
         const prefixMatch = item.str.match(/^(\d{1,2})\s*([0-9A-Z]{2,5}-)/i);
         if (prefixMatch) itemNo = prefixMatch[1];
-
+        let adjX = item.x;
+        let adjW = item.w;
+        if(itemNo){
+	        const prefixLen = itemNo.length + 1;
+	        const charW = item.w / Math.max(item.str.length, 1);
+	        adjX = item.x + prefixLen * charW;
+	        adjW = Math.max(item.w - prefixLen * charW, 20);
+        }
         partMatches.push({
           partNo: norm(m[0]),
-          x: item.x,
+          x: adjX,
           y: item.y,
-          w: item.w,
+          w: adjW,
           h: item.h,
           extractedItemNo: itemNo
         });
