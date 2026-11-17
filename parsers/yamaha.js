@@ -32,7 +32,7 @@
    *   2~5 碼英數 + '-' + 3~6 碼英數 + 可選 1~2 段（每段 1~3 碼）
    * 例：5VY-1111-00、1WS-F3100-00、2C0-12100-01
    */
-  const YAMAHA_PART_REGEX = /[0-9A-Z]{2,5}[－–—-][0-9A-Z]{3,6}(?:[－–—-][0-9A-Z]{1,3}){0,2}/gi;
+  const YAMAHA_PART_REGEX = /[0-9A-Z]{2,5}[－–—-][0-9A-Z]{3,6}(?:[－–—-][0-9A-Z]{2,5}){0,2}/gi;
 
   /**
    * 判斷是否為合法 Yamaha 零件號
@@ -40,7 +40,7 @@
   function isValidYamahaPartNo(p) {
     const s = norm(p);
     if (!s || s.length < 7) return false;
-    if (!/^[0-9A-Z]{2,5}-[0-9A-Z]{3,6}(-[0-9A-Z]{1,3}){0,2}$/.test(s)) return false;
+    if (!/^[0-9A-Z]{2,5}-[0-9A-Z]{3,6}(-[0-9A-Z]{2,5}){0,2}$/.test(s)) return false;
     const parts = s.split('-');
     // 首段若為 1~2 位純數字，視為項次而非零件號開頭
     if (/^\d{1,2}$/.test(parts[0])) return false;
