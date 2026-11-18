@@ -209,12 +209,12 @@ let kawasakiLocale = 'en';
 
 /* ================= 縮放與渲染常數 ================= */
 const _isMobileUA = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth <= 1024;
-const RENDER_SCALE = _isMobileUA ? 1.8 : 2.5;
-const NEIGHBOR_SCALE_RATIO = 1.8;
+const RENDER_SCALE = _isMobileUA ? 2.2 : 2.5;
+const NEIGHBOR_SCALE_RATIO = 2.2;
 
 function getRenderScaleForPage(pageIndex, centerIndex) {
   if (pageIndex === centerIndex) return RENDER_SCALE;
-  return Math.max(1.8, RENDER_SCALE * NEIGHBOR_SCALE_RATIO);
+  return Math.max(2.2, RENDER_SCALE * NEIGHBOR_SCALE_RATIO);
 }
 const pageRenderedScale = new Map();
 
