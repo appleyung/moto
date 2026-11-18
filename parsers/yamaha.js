@@ -1,5 +1,5 @@
 /* ============================================================
- * EPC V31 parser module: yamaha
+ * EPC V31 parser module: yamaha_1
  * 職責：只做「文字解析 + 座標回傳」
  *   - parseItems(items, pageIndex) → { keys, parts, title }
  *   - extractTitle(items, pageIndex, fallback) → string
@@ -48,6 +48,39 @@
   }
 
   /**
+   * ✅ 高亮過濾：僅允許以下特定格式才標記高亮
+   *   - 5-5     : AAAAA-BBBBB
+   *   - 3-5-2   : AAA-BBBBB-12
+   *   - 3-5-2-2 : AAA-BBBBB-12-34
+   *   - 5-3-3   : AAAAA-123-456
+   *   - 5-3-5   : AAAAA-123-BBBBB
+   *   - 🆕 5-5-2 : AAAAA-BBBBB-12 (新增符合需求格式)
+   */
+  function isValidHighlightPartNo(partNo) {
+    const parts = partNo.toUpperCase().split('-');
+    
+    // 5-5
+    if (parts.length === 2 && parts[0].length === 5 && parts[1].length === 5) return true;
+    
+    // 3-5-2
+    if (parts.length === 3 && parts[0].length === 3 && parts[1].length === 5 && parts[2].length === 2) return true;
+    
+    // 3-5-2-2
+    if (parts.length === 4 && parts[0].length === 3 && parts[1].length === 5 && parts[2].length === 2 && parts[3].length === 2) return true;
+    
+    // 5-3-3
+    if (parts.length === 3 && parts[0].length === 5 && parts[1].length === 3 && parts[2].length === 3) return true;
+    
+    // 5-3-5
+    if (parts.length === 3 && parts[0].length === 5 && parts[1].length === 3 && parts[2].length === 5) return true;
+
+    // 🆕 新增：5-5-2
+    if (parts.length === 3 && parts[0].length === 5 && parts[1].length === 5 && parts[2].length === 2) return true;
+
+    return false;
+  }
+
+  /**
    * 清理零件名稱：
    *   去掉開頭的零件號、常見表頭字樣、前導標點
    */
@@ -61,7 +94,7 @@
     result = result
       .replace(/Model Name|Product Code|Colour Type|項次|部品番號|部品名稱|備註|數量|Qty|Ref|Description|Part No|Remarks|DR31/gi, '')
       .trim();
-    result = result.replace(/^[\s\-.:：.、\d]+/, '').trim();
+    result = result.replace(/^[\s\-:.：.\、\d]+/, '').trim();
     return result || '';
   }
 
@@ -137,14 +170,10 @@
         let itemNo = '';
         const prefixMatch = item.str.match(/^(\d{1,2})\s*([0-9A-Z]{2,5}-)/i);
         if (prefixMatch) itemNo = prefixMatch[1];
-        let adjX = item.x;
-        let adjW = item.w;
-        if(itemNo){
-	        const prefixLen = itemNo.length + 1;
-	        const charW = item.w / Math.max(item.str.length, 1);
-	        adjX = item.x + prefixLen * charW;
-	        adjW = Math.max(item.w - prefixLen * charW, 20);
-        }
+        // ✅ 改用 m.index 精準計算零件號起始位置，不再依賴固定前綴長度估算
+        const charW = (item.w || 1) / Math.max(item.str.length, 1);
+        let adjX = item.x + m.index * charW;
+        let adjW = Math.max(m[0].length * charW, 20); // ← 寬度也改為實際零件號長度
         partMatches.push({
           partNo: norm(m[0]),
           x: adjX,
@@ -263,6 +292,10 @@
     const hits = [];
     for (const p of parts) {
       if (!p.partNo) continue;
+      
+      // ✅ 過濾：只有符合指定格式的零件號才高亮
+      if (!isValidHighlightPartNo(p.partNo)) continue;
+      
       if (!isFinite(p._x) || !isFinite(p._y) || !isFinite(p._w) || !isFinite(p._h)) continue;
 
       hits.push({
@@ -284,7 +317,7 @@
   global.EPC_BRAND['yamaha'] = {
     id: 'yamaha',
     isValid: isValidYamahaPartNo,
-    isValidYamahaPartNo: isValidYamahaPartNo,
+    isValidHighlightPartNo: isValidHighlightPartNo,
     preferCompleteYamahaKey: global.preferCompleteYamahaKey,
     extractTitle: extractTitleYamaha,
     extractTitleYamaha: extractTitleYamaha,
