@@ -2135,3 +2135,13 @@ document.getElementById('btnCalc')?.addEventListener('click', () => {
   leftPane.style.position = 'relative';
   leftPane.appendChild(calcFrame);
 });
+
+//--------以下是下載到手機--------//
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js')
+      .then(() => console.log('SW 註冊成功'))
+      .catch(err => console.error('SW 註冊失敗:', err));
+  });
+}
