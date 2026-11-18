@@ -1,12 +1,11 @@
 /* ============================================================
- * EPC Viewer — app.js (v32)
+ * EPC Viewer — app.js (v33)
  * 職責：UI、渲染、虛擬化、縮放、滾動、PickList、匯出、檔案處理
  * 零件號判斷、頁面解析、高亮座標：完全委派給 window.EPC_BRAND[...]
  *
- * v32 新增：
- *   - 品牌切換（Y/H/K）後，清空所有頁解析資料
- *   - 已渲染頁立即用新品牌重繪高亮
- *   - 未渲染頁在下次 renderSinglePage 時自動用新品牌解析
+ * v33 修正：
+ *   - 修復滾動頁面重新渲染後，零件清單「＋ PickList」按鈕狀態
+ *     與 PickList 失去同步的問題（加入跨頁掃描）。
  * ============================================================ */
 
 'use strict';
@@ -827,12 +826,9 @@ document.addEventListener('DOMContentLoaded', () => {
         btnBrand.textContent = newBrand === 'yamaha' ? 'Y' : (newBrand === 'honda' ? 'H' : 'K');
         btnBrand.style.color = newBrand === 'yamaha' ? '#2563eb' : (newBrand === 'honda' ? '#dc2626' : '#16a34a');
 
-        // 未開 PDF → 只切換設定
         if (!currentPdfDoc) return;
-        // 同品牌 → 不重做
         if (newBrand === oldBrand) return;
 
-        // 有 PDF 且換品牌 → 重新解析並重繪
         await switchBrandAndReparseAll(newBrand);
       });
     });
@@ -875,13 +871,6 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 /* ================= 品牌切換：重新解析並重繪 ================= */
-/**
- * 切換品牌時：
- *   1. 清空所有頁的解析資料（pagePartKeys / pagePartsMap / pageTitles / partInfoMap）
- *   2. 對「已渲染」的頁面，移除舊高亮並用新品牌重解析 + 重繪
- *   3. 未渲染的頁面維持空資料，下次 renderSinglePage 時會自動用新品牌解析
- *   4. 重建下拉選單、刷新零件清單
- */
 async function switchBrandAndReparseAll(brand) {
   if (!currentPdfDoc) return;
 
@@ -892,13 +881,11 @@ async function switchBrandAndReparseAll(brand) {
   }
 
   try {
-    // 1. 取消進行中的渲染任務
     pageRenderTasks.forEach(task => { try { task.cancel(); } catch (e) {} });
     pageRenderTasks.clear();
     renderGeneration++;
     titleLoadToken++;
 
-    // 2. 清空所有解析資料（保留 renderedPages / canvas / pageRenderedScale）
     partInfoMap.clear();
     pagePartsMap.clear();
     pagePartKeys.clear();
@@ -906,18 +893,15 @@ async function switchBrandAndReparseAll(brand) {
     partFigLocations.clear();
     selectedKey = null;
 
-    // 3. 重設 locale（不重偵測，用預設；若需偵測可在此呼叫 detectManualKind）
     if (brand === 'honda') hondaLocale = 'jp';
     else if (brand === 'kawasaki') kawasakiLocale = 'en';
 
-    // 4. 對「已渲染」的頁面，移除舊高亮並用新品牌重繪
     const renderedList = [...renderedPages];
     for (let ri = 0; ri < renderedList.length; ri++) {
       const pageIdx = renderedList[ri];
       const pageDiv = container.querySelector(`.page-container[data-page-index="${pageIdx}"]`);
       if (!pageDiv) continue;
 
-      // 移除舊高亮層 / hit-box / 藍框 / pick-marker
       pageDiv.querySelectorAll('.highlight-layer, .part-hit-box, .pick-marker, [data-part-focus="1"]')
         .forEach(el => el.remove());
 
@@ -926,45 +910,37 @@ async function switchBrandAndReparseAll(brand) {
         const tc = await page.getTextContent();
         const vp = getPageViewport(page, RENDER_SCALE);
 
-        // 用新品牌重新解析
         const parsed = parsePageData(tc.items || [], pageIdx, brand);
         pagePartKeys.set(pageIdx, parsed.keys || []);
         pageTitles.set(pageIdx, parsed.title || `第 ${pageIdx + 1} 頁`);
 
-        // 重繪高亮
         highlightPartNumbersFromContent(pageDiv, tc, vp, brand);
       } catch (e) {
         console.warn('reparse rendered page failed', pageIdx, e);
       }
 
-      // 每 3 頁讓 UI 喘息
       if (ri % 3 === 2) {
         await new Promise(r => setTimeout(r, _isMobileUA ? 8 : 0));
       }
     }
 
-    // 5. 重建下拉選單
     rebuildAssemblyOptions();
     updateCustomSelectUI(currentSelectValue);
 
-    // 6. 刷新零件清單
     if (currentSelectValue === 'all') {
       renderPartList('all', 0, false);
     } else {
       renderPartList('page', currentPageIndex, false);
     }
 
-    // 7. 若之前有選中零件，重新嘗試高亮（品牌換了可能找不到，失敗就算了）
     if (selectedKey) {
       setTimeout(() => { try { highlightPartOnPage(selectedKey); } catch (e) {} }, 30);
     }
 
-    // 8. 背景補強弱標題（可選）
     setTimeout(() => {
       try { loadAllTitlesBackground(currentPdfDoc, brand); } catch (e) {}
     }, 150);
 
-    console.info(`[switchBrand] 已切換至「${brand}」並重新解析 ${renderedList.length} 頁已渲染頁面`);
   } catch (err) {
     console.error('切換品牌失敗:', err);
     alert('切換品牌失敗：' + err.message);
@@ -1685,18 +1661,31 @@ function renderPartList(mode = 'page', pageIdx = 0, scrollToTop = false) {
     }
     if (!info) info = { name: '（無名稱）', qty: 1, category: '未分類', itemNo: '' };
 
-    const pickData = pickList.get(key);
+    // 【精準修復】確保 pageIdx 有值，並掃描全域 PickList 以同步按鈕狀態
+    const safePageIdx = (typeof pageIdx === 'number' && !isNaN(pageIdx)) ? pageIdx : 0;
+    let pickData = pickList.get(key + '@p' + safePageIdx);
+    if (!pickData) {
+      for (const [k, v] of pickList) {
+        if (v.partKey && partKeysEqual(v.partKey, key)) {
+          pickData = v;
+          break;
+        }
+      }
+    }
+    
     const inPick = pickData !== undefined;
     const btnText = inPick ? `✓ 已加入 (${pickData.qty})` : '＋ PickList';
     const btnClass = inPick ? 'add-btn added' : 'add-btn';
-    const sel = partKeysEqual(key, selectedKey) ? ' selected' : '';
+    
+    const safeKey = key || '';
+    const sel = partKeysEqual(safeKey, selectedKey) ? ' selected' : '';
     const itemPrefix = info.itemNo ? `<span style="color:#94a3b8;font-size:12px;margin-right:6px;">[${esc(info.itemNo)}]</span>` : '';
 
-    return `<div class="part-row${sel}" data-key="${esc(key)}">
-      <span class="pno">${itemPrefix}${esc(key)}</span>
+    return `<div class="part-row${sel}" data-key="${esc(safeKey)}">
+      <span class="pno">${itemPrefix}${esc(safeKey)}</span>
       <span class="pname">${esc(info.name)}</span>
       <span class="pmeta"><span class="qty">×${info.qty}</span><br>${esc(info.category || '')}</span>
-      <button class="${btnClass}" data-add="${esc(key)}">${btnText}</button>
+      <button class="${btnClass}" data-add="${esc(safeKey)}">${btnText}</button>
     </div>`;
   };
 
