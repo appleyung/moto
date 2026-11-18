@@ -168,7 +168,7 @@
 
         // 嘗試從同一 item 開頭抓項次（例："12 5VY-1111-00" → itemNo=12）
         let itemNo = '';
-        const prefixMatch = item.str.match(/^(\d{1,2})\s*([0-9A-Z]{2,5}-)/i);
+        const prefixMatch = item.str.match(/^(\d{1,2})[\s\)]*([0-9A-Z]{2,5}-)/i);
         if (prefixMatch) itemNo = prefixMatch[1];
         // ✅ 改用 m.index 精準計算零件號起始位置，不再依賴固定前綴長度估算
         const charW = (item.w || 1) / Math.max(item.str.length, 1);
@@ -209,7 +209,8 @@
 
         // 左側：項次（例：「12」）
         if (!itemNo && dx < -5 && dx >= -150) {
-          if (/^\d{1,2}$/.test(v.str)) itemNo = v.str;
+          const cleanStr = v.str.replace(/[)]/, '');
+          if (/^\d{1,2}$/.test(cleanStr)) itemNo = cleanStr;
         }
         // 右側：名稱或數量
         else if (dx > 0) {
