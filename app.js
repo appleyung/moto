@@ -253,7 +253,18 @@ function scrollToKeepContentAtMid(cx, cy, midX, midY) {
 function applyZoom(newScale, originX, originY) {
   const oldScale = scale;
   const oldZ = oldScale / RENDER_SCALE;
-  scale = Math.max(0.2, Math.min(newScale, 5));
+  // 最小縮放：頁面高度恰好等於瀏覽區高度
+  let minZoom = 0.2;
+  if (currentPdfDoc && container.firstElementChild) {
+    try {
+      const firstPage = currentPdfDoc.pages[0];
+      if (firstPage) {
+        const vp = firstPage.getViewport({ scale: RENDER_SCALE });
+        minZoom = Math.max(0.2, ((viewport.clientHeight - 24) / vp.height) * RENDER_SCALE);
+      }
+    } catch (e) {}
+  }
+  scale = Math.max(minZoom, Math.min(newScale, 5));
   if (Math.abs(scale - oldScale) < 0.0001) { zoomInput.value = Math.round(scale * 100); return; }
   if (originX === undefined || originY === undefined) {
     originX = viewport.clientWidth / 2;
@@ -449,27 +460,16 @@ function cleanupOldPages(centerIndex) {
 }
 
 async function renderPagesInRange(centerIndex) {
-  if (!currentPdfDoc) return;
+  if (!currentPdfDoc || renderedPages.has(centerIndex)) return;
   const gen = ++renderGeneration;
-  const start = Math.max(0, centerIndex - 1);
-  const end = Math.min(currentPdfDoc.numPages - 1, centerIndex + 1);
-  const order = [centerIndex, centerIndex - 1, centerIndex + 1]
-    .filter((idx, i, arr) => idx >= start && idx <= end && arr.indexOf(idx) === i);
-  for (const i of order) {
-    if (gen !== renderGeneration) return;
-    if (renderedPages.has(i)) continue;
-    const wantScale = getRenderScaleForPage(i, centerIndex);
-    await renderSinglePage(i, gen, wantScale, centerIndex);
-  }
+  await renderSinglePage(centerIndex, gen, RENDER_SCALE, null);
 }
 
-async function renderSinglePage(pageIndex, gen, pageScale, centerIndex) {
+async function renderSinglePage(pageIndex, gen, pageScale, _centerIndex) {
   const pageDiv = container.querySelector(`.page-container[data-page-index="${pageIndex}"]`);
   if (!pageDiv || renderedPages.has(pageIndex)) return;
   renderedPages.add(pageIndex);
   const drawScale = pageScale != null ? pageScale : RENDER_SCALE;
-  const isNeighbor = centerIndex != null && pageIndex !== centerIndex;
-  const doHighlight = centerIndex == null || Math.abs(pageIndex - centerIndex) <= 1;
   pageRenderedScale.set(pageIndex, drawScale);
 
   try {
@@ -499,7 +499,7 @@ async function renderSinglePage(pageIndex, gen, pageScale, centerIndex) {
     canvas.style.width = layoutVp.width + 'px';
     canvas.style.height = layoutVp.height + 'px';
     canvas.style.display = 'block';
-    if (isNeighbor) canvas.style.imageRendering = 'auto';
+
     pageDiv.appendChild(canvas);
 
     const task = page.render({ canvasContext: ctx, viewport: drawVp });
@@ -517,18 +517,16 @@ async function renderSinglePage(pageIndex, gen, pageScale, centerIndex) {
     pageDiv.appendChild(textLayerDiv);
 
     const tc = await page.getTextContent();
-    if (!isNeighbor) {
+    try {
+      await pdfjsLib.renderTextLayer({
+        textContent: tc, container: textLayerDiv, viewport: layoutVp, textDivs: []
+      }).promise;
+    } catch (tle) {
       try {
         await pdfjsLib.renderTextLayer({
-          textContent: tc, container: textLayerDiv, viewport: layoutVp, textDivs: []
+          textContentSource: tc, container: textLayerDiv, viewport: layoutVp, textDivs: []
         }).promise;
-      } catch (tle) {
-        try {
-          await pdfjsLib.renderTextLayer({
-            textContentSource: tc, container: textLayerDiv, viewport: layoutVp, textDivs: []
-          }).promise;
-        } catch (e2) { console.warn('textLayer', e2); }
-      }
+      } catch (e2) { console.warn('textLayer', e2); }
     }
 
     // === 頁面解析：完全委派品牌模組 ===
@@ -549,15 +547,12 @@ async function renderSinglePage(pageIndex, gen, pageScale, centerIndex) {
     } catch (pe) { console.warn('on-demand parse', pe); }
 
     // === 高亮：完全由品牌模組 hits 驅動 ===
-    if (doHighlight) {
-      highlightPartNumbersFromContent(pageDiv, tc, layoutVp, currentMode);
-    }
+    highlightPartNumbersFromContent(pageDiv, tc, layoutVp, currentMode);
 
     if (selectedKey) {
       setTimeout(() => { try { highlightPartOnPage(selectedKey); } catch (e) {} }, 30);
     }
 
-    if (renderedPages.size > 5) cleanupOldPages(centerIndex);
     updateScaleTransform();
     updateRamUsage();
   } catch (err) {
@@ -567,35 +562,47 @@ async function renderSinglePage(pageIndex, gen, pageScale, centerIndex) {
   }
 }
 
-/* ================= 滾動同步 ================= */
+/* ================= 滾動同步：置中並渲染目前頁面 ================= */
 let scrollTimeout = null;
 function syncCurrentPage() {
-  if (!currentPdfDoc) return;
-  if (isScrollingProgrammatically || navLockTarget !== null) return;
+  if (!currentPdfDoc || isScrollingProgrammatically) return;
   const pages = Array.from(document.querySelectorAll('.page-container'));
   if (!pages.length) return;
 
   const z = zoomFactor();
   const mid = viewport.scrollTop + viewport.clientHeight / 2;
 
-  let bestPageIndex = 0;
-  let bestDist = Infinity;
-
+  let bestPageIndex = 0, bestDist = Infinity;
   for (const page of pages) {
     const idx = parseInt(page.dataset.pageIndex, 10);
     if (isNaN(idx)) continue;
     const top = page.offsetTop * z;
     const height = page.offsetHeight * z;
-    const bottom = top + height;
     const center = top + height / 2;
-    if (mid >= top && mid <= bottom) { bestPageIndex = idx; bestDist = 0; break; }
+    if (mid >= top && mid <= top + height) { bestPageIndex = idx; bestDist = 0; break; }
     const dist = Math.abs(center - mid);
     if (dist < bestDist) { bestDist = dist; bestPageIndex = idx; }
   }
 
-  renderPagesInRange(bestPageIndex);
-  if (currentSelectValue === 'all') return;
+  // 將目前頁面置中於瀏覽區
+  const viewH = viewport.clientHeight;
+  const pageH = pages[bestPageIndex].offsetHeight * z;
+  let targetTop = (viewH - pageH) / 2;
+  if (pages[bestPageIndex].offsetTop * z > viewH - pageH) {
+    targetTop = pages[bestPageIndex].offsetTop * z + pageH - viewH;
+  }
+  isScrollingProgrammatically = true;
+  viewport.scrollTop = targetTop;
+  setTimeout(() => { isScrollingProgrammatically = false; }, 50);
 
+  // 清理離屏快取
+  cleanupOffscreenPages(bestPageIndex);
+
+  // 渲染目前頁面
+  renderPagesInRange(bestPageIndex);
+
+  if (navLockTarget !== null) return;
+  if (currentSelectValue === 'all') return;
   if (currentSelectValue !== String(bestPageIndex)) {
     currentSelectValue = String(bestPageIndex);
     updateCustomSelectUI(String(bestPageIndex));
@@ -612,6 +619,23 @@ viewport.addEventListener('scroll', () => {
   clearTimeout(scrollTimeout);
   scrollTimeout = setTimeout(syncCurrentPage, 80);
 });
+
+/* ================= 清理離屏快取 ================= */
+function cleanupOffscreenPages(idx) {
+  const keep = new Set([idx - 1, idx, idx + 1]);
+  renderedPages.forEach(pageIdx => {
+    if (keep.has(pageIdx)) return;
+    const pageDiv = container.querySelector(`.page-container[data-page-index="${pageIdx}"]`);
+    if (pageDiv) {
+      pageDiv.querySelectorAll('canvas').forEach(cv => { cv.width = 0; cv.height = 0; cv.remove(); });
+      const tl = pageDiv.querySelector('.textLayer');
+      if (tl) tl.innerHTML = '';
+      pageDiv.style.background = '#e2e8f0';
+    }
+    renderedPages.delete(pageIdx);
+    pageRenderedScale.delete(pageIdx);
+  });
+}
 
 let _pdfPrevScrollTop = 0;
 function goToPdfFirstPage() {
@@ -1569,9 +1593,15 @@ function jumpToPart(key) {
 
   if (!alreadyOnPage) {
     currentPageIndex = targetPage;
+    // 跳到不同頁：清除舊頁快取並強制重新渲染
+    renderedPages.clear();
+    pageRenderedScale.clear();
     renderPartList('page', targetPage, false);
     scrollToPage(targetPage);
   } else {
+    // 同頁：清除舊頁快取後重新渲染
+    cleanupOffscreenPages(currentPageIndex);
+    renderedPages.delete(currentPageIndex);
     renderPartList('page', targetPage, false);
     renderPagesInRange(targetPage);
   }
@@ -1750,19 +1780,29 @@ function addToPickList(key, pageIdx) {
   key = String(key).trim();
   if (!key) return;
 
+  let info = partInfoMap.get(key);
+
   const pIdx = (pageIdx != null) ? pageIdx : (typeof currentPageIndex !== 'undefined' ? currentPageIndex : 0);
   const pickKey = key + '@p' + pIdx;
 
-  let info = partInfoMap.get(key);
+  // 檢查是否已存在相同零件號（合併）
+  for (const [k, v] of pickList) {
+    if (partKeysEqual(v.partKey || '', key)) {
+      pickList.get(k).qty += (info && info.qty ? info.qty : 1);
+      renderPickList();
+      if (typeof highlightPickListItems === 'function') highlightPickListItems();
+      return;
+    }
+  }
 
+  // 從頁面資料取得零件資訊
   const pageParts = pagePartsMap.get(pIdx) || [];
   const foundInPage = pageParts.find(p => partKeysEqual(p.partNo, key));
   if (foundInPage) info = foundInPage;
 
   if (!info) info = { name: '（無名稱）', qty: 1, category: '未分類', itemNo: '' };
 
-  if (pickList.has(pickKey)) pickList.get(pickKey).qty += (info.qty || 1);
-  else pickList.set(pickKey, {
+  pickList.set(pickKey, {
     partKey: key,
     pageIndex: pIdx,
     name: info.name || '（無名稱）',
@@ -1827,17 +1867,14 @@ function renderPickList() {
     const itemPrefix = data.itemNo ? `<span style="color:#94a3b8;font-size:12px;margin-right:6px;">[${esc(data.itemNo)}]</span>` : '';
     const sel = partKeysEqual(partKey, selectedKey) ? ' selected' : '';
 
-    html += `<div class="pick-item${sel}" data-key="${esc(pickKey)}" data-part="${esc(partKey)}" data-page="${pIdx}" title="點擊：跳至第 ${pIdx+1} 頁並藍色高亮">
+    html += `<div class="pick-item${sel}" data-key="${esc(pickKey)}" data-part="${esc(partKey)}" data-page="${pIdx}">
       <div class="pick-item-top">
-        <div>
-          <div class="pk-no">${itemPrefix}${esc(partKey)}</div>
-          <div class="pk-name">${esc(data.name)}</div>
-          <span class="pk-cat">${esc(data.category)} · 第 ${pIdx+1} 頁</span>
-        </div>
-        <button class="del-pk" data-del-pk="${esc(pickKey)}" title="移除">✕</button>
+        <span class="pk-no">${itemPrefix}${esc(partKey)}</span>
+        <span class="pk-name">${esc(data.name)}</span>
+        <span class="pk-cat">${esc(data.category)} · 第 ${pIdx+1} 頁</span>
       </div>
       <div class="pick-item-bottom">
-        <div class="pick-qty">
+        <div class="pick-ctrl">
           <button data-pk-dec="${esc(pickKey)}">−</button>
           <input type="number" min="1" value="${data.qty}" data-pk-input="${esc(pickKey)}">
           <button data-pk-inc="${esc(pickKey)}">+</button>
@@ -1850,7 +1887,7 @@ function renderPickList() {
 
   box.querySelectorAll('.pick-item').forEach(row => {
     row.addEventListener('click', e => {
-      if (e.target.closest('.del-pk, .pick-qty, button, input')) return;
+      if (e.target.closest('.pick-ctrl')) return;
       const pickKey = row.dataset.key;
       const partKey = row.dataset.part || pickKey;
       const pIdx = parseInt(row.dataset.page, 10);
@@ -1868,10 +1905,6 @@ function renderPickList() {
       if (!isNaN(pIdx)) currentPageIndex = pIdx;
       jumpToPart(partKey);
     });
-  });
-  box.querySelectorAll('[data-del-pk]').forEach(b => b.onclick = (e) => {
-    e.stopPropagation();
-    setPickQty(b.dataset.delPk, 0);
   });
   box.querySelectorAll('[data-pk-dec]').forEach(b => b.onclick = (e) => {
     e.stopPropagation();
