@@ -1244,14 +1244,6 @@ html.ios-standalone .pwa-safe-top {
   box-sizing: border-box !important;
 }
 
-/* 非 standalone 時仍可為 0（瀏覽器有自己的狀態列） */
-@media (display-mode: browser) {
-  #pwaSafeTop {
-    height: 0 !important;
-    min-height: 0 !important;
-    overflow: hidden !important;
-  }
-}
 
 .epc-toolbar {
   background: #ffffff !important;
@@ -1330,5 +1322,41 @@ body.ios-standalone #pwaSafeTop {
 }
 html.ios-standalone .epc-toolbar {
   background: #ffffff !important;
+  opacity: 1 !important;
+}
+
+
+/* ===== PWA3：工具列自身頂部留白（最可靠，不依賴 #pwaSafeTop 是否生效） ===== */
+html.ios-standalone .epc-toolbar,
+body.ios-standalone .epc-toolbar,
+html.ios-standalone #pwaSafeTop + .epc-toolbar {
+  padding-top: 47px !important;
+  background: #ffffff !important;
+  opacity: 1 !important;
+  box-sizing: border-box !important;
+}
+/* 若已有 #pwaSafeTop 佔高，避免雙倍：standalone 時二選一 */
+html.ios-standalone #pwaSafeTop {
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+  display: none !important;
+}
+html.ios-standalone .epc-toolbar {
+  padding-top: max(47px, env(safe-area-inset-top, 47px)) !important;
+  background: #ffffff !important;
+  background-clip: padding-box !important;
+  opacity: 1 !important;
+  filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+html.ios-standalone .epc-toolbar .search-group input {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  border: 1px solid #64748b !important;
   opacity: 1 !important;
 }
