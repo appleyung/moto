@@ -781,6 +781,26 @@ document.addEventListener('gestureend', e => {
   if (!e.target.closest || !e.target.closest('#pdfViewport')) e.preventDefault();
 }, { passive: false });
 
+
+/* 全頁禁止連續點擊觸發瀏覽器雙擊放大（輸入框除外） */
+(function doubleTapZoomBlock() {
+  let lastTouchEnd = 0;
+  document.addEventListener('touchend', function (e) {
+    const t = e.target;
+    if (t && (t.closest && (t.closest('input, textarea, select, [contenteditable="true"]')))) return;
+    const now = Date.now();
+    if (now - lastTouchEnd < 320) {
+      e.preventDefault();
+    }
+    lastTouchEnd = now;
+  }, { passive: false });
+  document.addEventListener('dblclick', function (e) {
+    const t = e.target;
+    if (t && (t.closest && (t.closest('input, textarea, select, [contenteditable="true"]')))) return;
+    e.preventDefault();
+  }, true);
+})();
+
 (function doubleTapToolbar() {
   const bar = document.querySelector('.epc-toolbar');
   if (!bar) return;
