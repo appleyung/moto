@@ -1,35 +1,3 @@
-
-(function forceIosPwaChrome() {
-  function apply() {
-    var standalone = document.documentElement.classList.contains('ios-standalone') ||
-      (window.navigator.standalone === true);
-    if (!standalone) return;
-    document.documentElement.classList.add('ios-standalone');
-    var top = document.getElementById('pwaSafeTop');
-    if (top) {
-      var inset = 0;
-      try {
-        var probe = document.createElement('div');
-        probe.style.cssText = 'position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top,0px);';
-        document.body.appendChild(probe);
-        inset = parseFloat(getComputedStyle(probe).paddingTop) || 0;
-        probe.remove();
-      } catch (e) {}
-      var h = Math.max(47, inset || 47);
-      top.style.cssText = 'display:block;flex-shrink:0;width:100%;height:' + h + 'px;min-height:' + h + 'px;background:#fff;z-index:200;';
-    }
-    var bar = document.querySelector('.epc-toolbar');
-    if (bar) {
-      bar.style.background = '#ffffff';
-      bar.style.opacity = '1';
-    }
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
-  else apply();
-  window.addEventListener('resize', apply);
-})();
-
-
 /* iOS 主畫面 App 模式標記（Safari 有時不支援 display-mode） */
 (function () {
   try {
@@ -2677,3 +2645,100 @@ if ('serviceWorker' in navigator) {
     }
   });
 }
+
+
+/* ========================================== */
+/* iOS PWA 安全區強制修正 (Post-Load Fix) */
+/* ========================================== */
+(function forceIOSSafeAreaFix() {
+  function measureInset(side) {
+    try {
+      var el = document.createElement('div');
+      el.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding-' + side + ':env(safe-area-inset-' + side + ',0px);';
+      document.body.appendChild(el);
+      var val = parseFloat(getComputedStyle(el)['padding' + side.charAt(0).toUpperCase() + side.slice(1)]) || 0;
+      el.remove();
+      return val;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  function apply() {
+    var standalone = false;
+    try {
+      standalone = window.navigator.standalone === true ||
+        (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    } catch (e) {}
+    if (standalone) {
+      document.documentElement.classList.add('ios-standalone');
+      document.body.classList.add('ios-standalone');
+    }
+
+    // 僅在 standalone 強制頂部白底高度
+    if (standalone) {
+      var topInset = measureInset('top');
+      var forcedTop = Math.max(topInset || 0, 47);
+      var safeTopEl = document.getElementById('pwaSafeTop');
+      if (safeTopEl) {
+        safeTopEl.style.setProperty('height', forcedTop + 'px', 'important');
+        safeTopEl.style.setProperty('min-height', forcedTop + 'px', 'important');
+        safeTopEl.style.setProperty('background', '#ffffff', 'important');
+        safeTopEl.style.setProperty('display', 'block', 'important');
+        safeTopEl.style.setProperty('flex-shrink', '0', 'important');
+      }
+      var bar = document.querySelector('.epc-toolbar');
+      if (bar) {
+        bar.style.setProperty('background', '#ffffff', 'important');
+        bar.style.setProperty('opacity', '1', 'important');
+      }
+    }
+
+    // 收合側欄貼底
+    var layout = document.querySelector('.layout');
+    var collapsed = layout && layout.classList.contains('panel-collapsed');
+    var tabs = document.querySelector('.sidebar-tabs');
+    var body = document.querySelector('.sidebar-body');
+    var sidebar = document.querySelector('.sidebar');
+    if (collapsed) {
+      var bottomInset = measureInset('bottom');
+      if (body) {
+        body.style.display = 'none';
+        body.style.height = '0';
+        body.style.flex = '0 0 0px';
+      }
+      if (tabs) {
+        tabs.style.height = '48px';
+        tabs.style.minHeight = '48px';
+        tabs.style.maxHeight = '48px';
+        tabs.style.paddingBottom = bottomInset + 'px';
+        tabs.style.boxSizing = 'content-box';
+        tabs.style.background = '#ffffff';
+      }
+      if (sidebar) {
+        sidebar.style.height = 'auto';
+        sidebar.style.flex = '0 0 auto';
+        sidebar.style.minHeight = '0';
+        sidebar.style.maxHeight = 'none';
+        sidebar.style.paddingBottom = '0';
+        sidebar.style.overflow = 'hidden';
+      }
+    }
+    try { console.log('[iOS Fix] standalone=', standalone, 'top=', measureInset('top'), 'bottom=', measureInset('bottom')); } catch (e) {}
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { setTimeout(apply, 50); });
+  } else {
+    setTimeout(apply, 50);
+  }
+  window.addEventListener('resize', function () { setTimeout(apply, 50); });
+  window.addEventListener('orientationchange', function () { setTimeout(apply, 150); });
+
+  // 收合按鈕後再跑一次
+  document.addEventListener('click', function (e) {
+    if (e.target && e.target.closest && e.target.closest('#btnSidebarCollapse')) {
+      setTimeout(apply, 30);
+    }
+  }, true);
+})();
