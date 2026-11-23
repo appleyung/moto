@@ -1,3 +1,12 @@
+/* iPhone 主畫面 App：標記 class，供 CSS 下移 5px */
+(function () {
+  try {
+    var st = window.navigator.standalone === true ||
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    if (st) document.documentElement.classList.add('ios-standalone');
+  } catch (e) {}
+})(); /* ios-standalone-shift-5 */
+
 /* ============================================================
  * EPC Viewer — app.js (v33)
  * 職責：UI、渲染、虛擬化、縮放、滾動、PickList、匯出、檔案處理
