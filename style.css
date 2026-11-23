@@ -77,16 +77,18 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
   display: flex !important;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 8px;
-  background: #fff !important;
+  padding: 6px 8px;
+  background: #ffffff !important;
   border-bottom: 1px solid var(--line);
-  flex: 0 0 44px !important;
-  height: 44px;
+  flex: 0 0 auto !important;
+  height: auto !important;
+  min-height: 44px;
   width: 100%;
   gap: 6px;
   box-sizing: border-box;
   z-index: 50;
   position: relative;
+  opacity: 1 !important;
 }
 .epc-toolbar .toolbar-left {
   flex: 1 1 auto;
@@ -105,8 +107,12 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
 /* 搜尋框 */
 .epc-toolbar .search-group { flex: 1 1 auto; min-width: 100px; }
 .epc-toolbar .search-group input {
-  width: 100%; height: 30px; padding: 0 10px; border: 1px solid #cdd5df; border-radius: 6px; font-size: 13px;
+  width: 100%; height: 30px; padding: 0 10px;
+  border: 1px solid #94a3b8; border-radius: 6px; font-size: 13px;
+  background: #ffffff !important; color: #0f172a !important;
+  opacity: 1 !important; -webkit-appearance: none; appearance: none;
 }
+.epc-toolbar .search-group input::placeholder { color: #64748b; opacity: 1; }
 
 /* 共用的工具列按鈕 */
 .toolbar-btn {
@@ -256,7 +262,33 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
   @media (orientation: portrait) {
     .layout { flex-direction: column !important; }
     .layout .left-pane { flex: 1 1 auto !important; min-height: 0 !important; order: 1 !important; }
-    .layout .sidebar { flex: 0 0 45dvh !important; height: 45dvh !important; width: 100% !important; max-width: 100% !important; min-width: 100% !important; order: 2 !important; border-left: none !important; border-top: 1px solid var(--line) !important; }
+    .layout .sidebar {
+      flex: 0 0 auto !important;
+      height: auto !important;
+      max-height: min(42dvh, calc(100dvh - 180px - env(safe-area-inset-bottom, 0px))) !important;
+      min-height: 200px !important;
+      width: 100% !important; max-width: 100% !important; min-width: 100% !important;
+      order: 2 !important;
+      border-left: none !important;
+      border-top: 1px solid var(--line) !important;
+      padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+      box-sizing: border-box !important;
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: hidden !important;
+      background: #fff !important;
+    }
+    .layout .sidebar .sidebar-body {
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    .layout .left-pane {
+      flex: 1 1 auto !important;
+      min-height: 30dvh !important;
+    }
 
     .epc-toolbar {
       display: grid !important;
@@ -338,21 +370,153 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
 
   /* 手機橫向 (Landscape) - 預留更多空間給右上角工具列 */
   @media (orientation: landscape) {
-    .layout { flex-direction: row !important; }
-    .layout .left-pane { flex: 1 1 auto !important; min-height: 0 !important; width: 100% !important; }
-    .layout .sidebar { flex: 0 0 340px !important; width: 340px !important; max-width: 340px !important; min-width: 280px !important; border-left: 1px solid var(--line) !important; border-top: none !important; }
+    .layout {
+      flex-direction: row !important;
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+      height: 100% !important;
+      align-items: stretch !important;
+    }
+    .layout .left-pane {
+      flex: 1 1 0 !important;
+      min-width: 0 !important;
+      min-height: 0 !important;
+      height: auto !important;
+      max-height: none !important;
+      width: auto !important;
+      align-self: stretch !important;
+    }
+    .layout .sidebar {
+      flex: 0 0 280px !important;
+      width: 280px !important;
+      max-width: 280px !important;
+      min-width: 280px !important;
+      height: auto !important;
+      max-height: none !important;
+      min-height: 0 !important;
+      align-self: stretch !important;
+      border-left: 1px solid var(--line) !important;
+      border-top: none !important;
+      border-bottom: none !important;
+      display: flex !important;
+      flex-direction: column !important;
+      order: 2 !important;
+      overflow: hidden !important;
+      padding: 0 !important;
+      box-sizing: border-box !important;
+      background: #fff !important;
+    }
+    .layout .sidebar-tabs {
+      display: grid !important;
+      grid-template-columns: 40px 1fr 1fr 40px !important;
+      grid-template-rows: 44px !important;
+      align-items: stretch !important;
+      width: 100% !important;
+      height: 44px !important;
+      min-height: 44px !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      box-sizing: border-box !important;
+      border-bottom: 1px solid var(--line) !important;
+      gap: 0 !important;
+      overflow: visible !important;
+      flex: 0 0 44px !important;
+    }
+    .layout .sidebar-tabs .sidebar-collapse-btn {
+      grid-column: 1 !important;
+      width: 100% !important;
+      height: 100% !important;
+      min-width: 0 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      font-size: 13px !important;
+      border-radius: 0 !important;
+    }
+    .layout .sidebar-tabs .sidebar-tab[data-view="list"] {
+      grid-column: 2 !important;
+    }
+    .layout .sidebar-tabs .sidebar-tab[data-view="pick"] {
+      grid-column: 3 !important;
+    }
+    .layout .sidebar-tabs #btnCalc {
+      grid-column: 4 !important;
+      width: 100% !important;
+      height: 100% !important;
+      min-width: 0 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+    }
+    .layout .sidebar-tabs .sidebar-tab {
+      width: 100% !important;
+      height: 100% !important;
+      min-width: 0 !important;
+      padding: 0 4px !important;
+      margin: 0 !important;
+      font-size: 12px !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      box-sizing: border-box !important;
+    }
+    .layout .sidebar-tabs .sidebar-tab .cnt {
+      font-size: 10px !important;
+      min-width: 16px !important;
+      padding: 0 4px !important;
+      margin-left: 3px !important;
+    }
+    /* 下拉選單在窄欄可完整顯示 */
+    .layout .sidebar .panel-nav,
+    .layout .sidebar .custom-select-wrap {
+      min-width: 0 !important;
+      padding-left: 6px !important;
+      padding-right: 6px !important;
+    }
+    .layout .sidebar .custom-select-trigger {
+      font-size: 12px !important;
+      max-height: none !important;
+      white-space: nowrap !important;
+    }
+    .layout .sidebar-body {
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    .layout.panel-collapsed {
+      flex-direction: row !important;
+    }
+    .layout.panel-collapsed .sidebar {
+      flex: 0 0 48px !important;
+      width: 48px !important;
+      min-width: 48px !important;
+      max-width: 48px !important;
+    }
+    .layout.panel-collapsed .sidebar-body { display: none !important; }
+    .layout.panel-collapsed .sidebar-tabs {
+      flex-direction: column !important;
+      height: 100% !important;
+      width: 100% !important;
+      padding: 4px 2px !important;
+    }
 
     .epc-toolbar {
       display: grid !important;
-      grid-template-columns: minmax(60px, 1fr) 40px 56px 100px 32px 32px 32px !important;
+      grid-template-columns: minmax(80px, 1fr) 36px 52px minmax(110px, 130px) 32px 32px 32px !important;
       grid-template-rows: 1fr !important;
       grid-template-areas: "search toup ram zoomcontrols lang brand upload" !important;
-      height: 44px !important; 
-      flex: 0 0 44px !important; 
-      padding: 4px 6px !important; 
-      gap: 4px !important; 
+      height: auto !important;
+      min-height: 44px !important;
+      flex: 0 0 auto !important;
+      padding: 4px 6px !important;
+      gap: 4px !important;
       align-items: center !important;
       width: 100% !important;
+      background: #fff !important;
     }
 
     .epc-toolbar .toolbar-left, .epc-toolbar .toolbar-right { display: contents !important; }
@@ -749,9 +913,6 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
 /* ===== PWA / iPhone 17 安全區 ===== */
 .epc-toolbar {
   background: #ffffff !important;
-  /* 頂部已有 .pwa-safe-top，工具列不再重複加大 padding-top */
-  padding-top: 6px !important;
-  padding-bottom: 6px !important;
   position: relative;
   z-index: 50;
   flex-shrink: 0;
@@ -807,4 +968,21 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
     padding-bottom: env(safe-area-inset-bottom, 0px) !important;
     box-sizing: content-box !important;
   }
+}
+
+
+/* 計算機開啟：佔滿 layout，隱藏側欄佔位 */
+.layout.calc-open {
+  position: relative !important;
+}
+.layout.calc-open .sidebar {
+  display: none !important;
+}
+.layout.calc-open .left-pane {
+  flex: 1 1 100% !important;
+  width: 100% !important;
+  max-width: 100% !important;
+}
+#calcIframeContainer {
+  background: #fff;
 }
