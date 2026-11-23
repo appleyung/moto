@@ -2633,7 +2633,7 @@ window.addEventListener('resize', function () {
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=20261123pwa3')
+    navigator.serviceWorker.register('sw.js?v=20261123pwa4')
       .then(function (reg) {
         console.log('SW 註冊成功');
         try { reg.update(); } catch (e) {}
@@ -2643,7 +2643,7 @@ if ('serviceWorker' in navigator) {
     if (window.caches && caches.keys) {
       caches.keys().then(function (keys) {
         keys.forEach(function (k) {
-          if (k !== 'mot-cache-v20261123pwa3') caches.delete(k);
+          if (k !== 'mot-cache-v20261123pwa4') caches.delete(k);
         });
       });
     }
