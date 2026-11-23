@@ -56,14 +56,49 @@ function partKeysEqual(a, b) {
 /**
  * 依當前模式取得品牌模組
  */
+var selectedLocale = 'zh';
+
 function getBrand(mode) {
-  const B = window.EPC_BRAND || {};
-  let key = mode || currentMode;
-  if (key === 'honda') key = (hondaLocale === 'id') ? 'honda-id' : 'honda-jp';
-  else if (key === 'kawasaki') key = (kawasakiLocale === 'id') ? 'kawasaki-id' : 'kawasaki-th';
-  else if (key === 'yamaha-loose') key = 'yamaha-loose';
-  return B[key] || null;
+  var B = window.EPC_BRAND || {};
+  var key = mode || currentMode || 'yamaha';
+  key = String(key);
+  if (key === 'honda' || key.indexOf('honda') === 0) {
+    key = (selectedLocale === 'id') ? 'honda-id' : 'honda-jp';
+  } else if (key === 'kawasaki' || key.indexOf('kawasaki') === 0) {
+    key = (selectedLocale === 'id') ? 'kawasaki-id' : 'kawasaki-th';
+  } else {
+    // yamaha
+    if (selectedLocale === 'en') key = 'yamaha-en';
+    else if (selectedLocale === 'id') key = 'yamaha-id';
+    else if (selectedLocale === 'th') key = 'yamaha-th';
+    else key = 'yamaha';
+  }
+  return B[key] || B['yamaha'] || B['honda-jp'] || B['kawasaki-th'] || null;
 }
+
+/* 若 parsers 未載入，嘗試補載 yamaha.js */
+function ensureBrandParsersLoaded() {
+  return new Promise(function (resolve) {
+    if (window.EPC_BRAND && window.EPC_BRAND.yamaha && typeof window.EPC_BRAND.yamaha.parseItems === 'function') {
+      resolve(true);
+      return;
+    }
+    var s = document.createElement('script');
+    s.src = 'parsers/yamaha.js?t=' + Date.now();
+    s.onload = function () {
+      console.log('[epc] late-loaded yamaha', Object.keys(window.EPC_BRAND || {}));
+      resolve(!!(window.EPC_BRAND && window.EPC_BRAND.yamaha));
+    };
+    s.onerror = function () {
+      console.error('[epc] failed to load parsers/yamaha.js');
+      resolve(false);
+    };
+    document.head.appendChild(s);
+  });
+}
+
+
+
 
 /* ================= 記憶體監控 ================= */
 const _uaStr = navigator.userAgent || '';
@@ -184,7 +219,7 @@ let currentPageIndex = 0;
 let isScrollingProgrammatically = false;
 let navLockTimer = null;
 let navLockTarget = null;
-let currentSelectValue = 'all';
+let currentSelectValue = '0';
 let currentMode = 'yamaha';
 let selectedBrand = 'yamaha';
 
@@ -237,6 +272,7 @@ function updateScaleTransform() {
     scaleWrapper.style.width = Math.max(1, w * z) + 'px';
     scaleWrapper.style.height = Math.max(1, h * z) + 'px';
   }
+  try { updateHorizontalScrollLock(); } catch (e) {}
 }
 
 function contentPointFromMid(midX, midY) {
@@ -250,20 +286,66 @@ function scrollToKeepContentAtMid(cx, cy, midX, midY) {
   viewport.scrollTop = cy * z - midY;
 }
 
+/** 兩側預留邊距（px） */
+var PDF_SIDE_MARGIN = 10;
+
+/**
+ * 最小縮放：寬度貼齊瀏覽區（兩側各留 PDF_SIDE_MARGIN）
+ * → 最小時不會左右溢出，只可上下滾動
+ */
+function getMinZoomScale() {
+  if (!viewport || !container) return 0.5;
+  const pageEl =
+    container.querySelector('.page-container[data-page-index="' + String(currentPageIndex || 0) + '"]') ||
+    container.querySelector('.page-container') ||
+    container.firstElementChild;
+  let pageW = 0, pageH = 0;
+  if (pageEl) {
+    pageW = parseFloat(pageEl.style.width) || pageEl.offsetWidth || 0;
+    pageH = parseFloat(pageEl.style.height) || pageEl.offsetHeight || 0;
+  }
+  if ((pageW < 1 || pageH < 1) && container.querySelector('.page-container')) {
+    const any = container.querySelector('.page-container');
+    pageW = parseFloat(any.style.width) || any.offsetWidth || pageW;
+    pageH = parseFloat(any.style.height) || any.offsetHeight || pageH;
+  }
+  if (pageW < 1) return 0.5;
+  const vw = Math.max(1, viewport.clientWidth - PDF_SIDE_MARGIN * 2);
+  // 顯示寬 = pageW * (scale / RENDER_SCALE) ≤ vw
+  return (vw / pageW) * RENDER_SCALE;
+}
+
+/** 內容寬不超過瀏覽區時：鎖左右捲動並水平置中 */
+function updateHorizontalScrollLock() {
+  if (!viewport) return;
+  const wrap = scaleWrapper || container;
+  if (!wrap) return;
+  // scaleWrapper 的 width 已在 updateScaleTransform 設成乘過 z 的值
+  const contentW = scaleWrapper
+    ? (parseFloat(scaleWrapper.style.width) || scaleWrapper.offsetWidth || 0)
+    : (container.offsetWidth * zoomFactor());
+  const vw = viewport.clientWidth;
+  if (contentW <= vw + 1) {
+    viewport.classList.add('pdf-no-x-scroll');
+    viewport.scrollLeft = 0;
+    if (scaleWrapper) {
+      scaleWrapper.style.marginLeft = 'auto';
+      scaleWrapper.style.marginRight = 'auto';
+    }
+  } else {
+    viewport.classList.remove('pdf-no-x-scroll');
+    if (scaleWrapper) {
+      scaleWrapper.style.marginLeft = '';
+      scaleWrapper.style.marginRight = '';
+    }
+  }
+}
+
+
 function applyZoom(newScale, originX, originY) {
   const oldScale = scale;
   const oldZ = oldScale / RENDER_SCALE;
-  // 最小縮放：頁面高度恰好等於瀏覽區高度
-  let minZoom = 0.2;
-  if (currentPdfDoc && container.firstElementChild) {
-    try {
-      const firstPage = currentPdfDoc.pages[0];
-      if (firstPage) {
-        const vp = firstPage.getViewport({ scale: RENDER_SCALE });
-        minZoom = Math.max(0.2, ((viewport.clientHeight - 24) / vp.height) * RENDER_SCALE);
-      }
-    } catch (e) {}
-  }
+  const minZoom = getMinZoomScale();
   scale = Math.max(minZoom, Math.min(newScale, 5));
   if (Math.abs(scale - oldScale) < 0.0001) { zoomInput.value = Math.round(scale * 100); return; }
   if (originX === undefined || originY === undefined) {
@@ -277,6 +359,7 @@ function applyZoom(newScale, originX, originY) {
   const z = zoomFactor();
   viewport.scrollLeft = contentX * z - originX;
   viewport.scrollTop = contentY * z - originY;
+  try { updateHorizontalScrollLock(); } catch (e) {}
   clearTimeout(window._zoomRenderTimeout);
   window._zoomRenderTimeout = setTimeout(() => {
     updateScaleTransform();
@@ -291,6 +374,33 @@ function fitWidth() {
   if (!rawWidth) return;
   const viewportWidth = viewport.clientWidth - 40;
   applyZoom(viewportWidth / rawWidth);
+}
+
+
+// 瀏覽區尺寸變更時：若目前已小於新的最小縮放，同步拉回
+(function () {
+  if (!viewport || typeof ResizeObserver === 'undefined') return;
+  let t = null;
+  const ro = new ResizeObserver(function () {
+    clearTimeout(t);
+    t = setTimeout(function () {
+      if (!currentPdfDoc) return;
+      const minZ = getMinZoomScale();
+      if (scale < minZ - 0.001) applyZoom(minZ);
+    }, 120);
+  });
+  ro.observe(viewport);
+})();
+
+
+// 鎖左右時強制 scrollLeft = 0
+if (viewport && !viewport.__epcXGuard) {
+  viewport.__epcXGuard = true;
+  viewport.addEventListener('scroll', function () {
+    if (viewport.classList.contains('pdf-no-x-scroll') && viewport.scrollLeft !== 0) {
+      viewport.scrollLeft = 0;
+    }
+  }, { passive: true });
 }
 
 $('btnZoomIn').onclick = () => applyZoom(scale + 0.2);
@@ -356,7 +466,8 @@ function applyPinchFrame(pts) {
   if (!pts || !pinchActive || pinchBaseDist < PINCH_MIN_DIST_START) return;
   const { dist, midX, midY } = midDistFromPts(pts);
   if (dist < PINCH_MIN_DIST_MOVE) return;
-  const newScale = Math.max(0.2, Math.min(pinchBaseScale * (dist / pinchBaseDist), 5));
+  const minZ = (typeof getMinZoomScale === 'function') ? getMinZoomScale() : 0.5;
+  const newScale = Math.max(minZ, Math.min(pinchBaseScale * (dist / pinchBaseDist), 5));
   scale = newScale;
   updateScaleTransform();
   if (zoomInput) zoomInput.value = Math.round(scale * 100);
@@ -441,7 +552,8 @@ function getPageRotation(page) { return ((page.rotate != null ? page.rotate : 0)
 function getPageViewport(page, s) { return page.getViewport({ scale: s, rotation: getPageRotation(page) }); }
 
 function cleanupOldPages(centerIndex) {
-  const keep = new Set([centerIndex - 1, centerIndex, centerIndex + 1]);
+  // 只保留「瀏覽區中心」那一頁，其餘釋放 RAM
+  const keep = new Set([centerIndex]);
   const candidates = [];
   renderedPages.forEach(idx => { if (!keep.has(idx)) candidates.push(idx); });
 
@@ -451,11 +563,15 @@ function cleanupOldPages(centerIndex) {
       pageDiv.querySelectorAll('canvas').forEach(cv => {
         cv.width = 0; cv.height = 0; cv.remove();
       });
+      const tl = pageDiv.querySelector('.textLayer');
+      if (tl) tl.innerHTML = '';
+      pageDiv.querySelectorAll('.highlight-layer, .part-hit-box').forEach(el => el.remove());
       pageDiv.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#94a3b8;">載入中...</div>';
       pageDiv.classList.add('placeholder');
     }
     renderedPages.delete(idx);
     pageRenderedScale.delete(idx);
+    pageRenderTasks.delete(idx);
   });
 }
 
@@ -532,18 +648,24 @@ async function renderSinglePage(pageIndex, gen, pageScale, _centerIndex) {
     // === 頁面解析：完全委派品牌模組 ===
     try {
       if (gen != null && gen !== renderGeneration) { renderedPages.delete(pageIndex); return; }
-      if (!(pagePartKeys.has(pageIndex) && (pagePartKeys.get(pageIndex) || []).length > 0)) {
+      // 每次渲染中心頁都重新解析（避免載入時空 keys 被快取後永遠不重抓）
+      {
         const parsed = parsePageData(tc.items, pageIndex, currentMode);
         pagePartKeys.set(pageIndex, parsed.keys || []);
         const prevTitle = pageTitles.get(pageIndex) || '';
         if (parsed.title && (!prevTitle || prevTitle === `第 ${pageIndex + 1} 頁` || parsed.title.length >= prevTitle.length)) {
           pageTitles.set(pageIndex, parsed.title);
         }
+        console.log('[epc] page', pageIndex, 'parts', (parsed.parts || []).length, 'brand', (getBrand(currentMode) || {}).id);
       }
-      if (currentSelectValue === 'all' || String(currentSelectValue) === String(pageIndex) || currentPageIndex === pageIndex) {
-        renderPartList(currentSelectValue === 'all' ? 'all' : 'page', pageIndex, false);
-        updateCustomSelectUI(currentSelectValue);
+      // 解析完立刻刷新清單（不依賴 select 是否已同步）
+      currentPageIndex = pageIndex;
+      if (currentSelectValue !== 'all') {
+        currentSelectValue = String(pageIndex);
+        updateCustomSelectUI(String(pageIndex));
       }
+      renderPartList(currentSelectValue === 'all' ? 'all' : 'page', pageIndex, false);
+      console.log('[epc] list refreshed page', pageIndex, 'map', (pagePartsMap.get(pageIndex) || []).length);
     } catch (pe) { console.warn('on-demand parse', pe); }
 
     // === 高亮：完全由品牌模組 hits 驅動 ===
@@ -562,7 +684,7 @@ async function renderSinglePage(pageIndex, gen, pageScale, _centerIndex) {
   }
 }
 
-/* ================= 滾動同步：置中並渲染目前頁面 ================= */
+/* ================= 滾動同步：偵測目前頁並渲染（不置中） ================= */
 let scrollTimeout = null;
 function syncCurrentPage() {
   if (!currentPdfDoc || isScrollingProgrammatically) return;
@@ -578,27 +700,15 @@ function syncCurrentPage() {
     if (isNaN(idx)) continue;
     const top = page.offsetTop * z;
     const height = page.offsetHeight * z;
-    const center = top + height / 2;
     if (mid >= top && mid <= top + height) { bestPageIndex = idx; bestDist = 0; break; }
+    const center = top + height / 2;
     const dist = Math.abs(center - mid);
     if (dist < bestDist) { bestDist = dist; bestPageIndex = idx; }
   }
 
-  // 將目前頁面置中於瀏覽區
-  const viewH = viewport.clientHeight;
-  const pageH = pages[bestPageIndex].offsetHeight * z;
-  let targetTop = (viewH - pageH) / 2;
-  if (pages[bestPageIndex].offsetTop * z > viewH - pageH) {
-    targetTop = pages[bestPageIndex].offsetTop * z + pageH - viewH;
-  }
-  isScrollingProgrammatically = true;
-  viewport.scrollTop = targetTop;
-  setTimeout(() => { isScrollingProgrammatically = false; }, 50);
-
-  // 清理離屏快取
+  // 不置中、不改 scrollTop：只同步頁碼、清理、渲染
+  currentPageIndex = bestPageIndex;
   cleanupOffscreenPages(bestPageIndex);
-
-  // 渲染目前頁面
   renderPagesInRange(bestPageIndex);
 
   if (navLockTarget !== null) return;
@@ -606,8 +716,7 @@ function syncCurrentPage() {
   if (currentSelectValue !== String(bestPageIndex)) {
     currentSelectValue = String(bestPageIndex);
     updateCustomSelectUI(String(bestPageIndex));
-    currentPageIndex = bestPageIndex;
-    renderPartList('page', bestPageIndex, true);
+    renderPartList('page', bestPageIndex, false);
   }
 }
 
@@ -622,19 +731,7 @@ viewport.addEventListener('scroll', () => {
 
 /* ================= 清理離屏快取 ================= */
 function cleanupOffscreenPages(idx) {
-  const keep = new Set([idx - 1, idx, idx + 1]);
-  renderedPages.forEach(pageIdx => {
-    if (keep.has(pageIdx)) return;
-    const pageDiv = container.querySelector(`.page-container[data-page-index="${pageIdx}"]`);
-    if (pageDiv) {
-      pageDiv.querySelectorAll('canvas').forEach(cv => { cv.width = 0; cv.height = 0; cv.remove(); });
-      const tl = pageDiv.querySelector('.textLayer');
-      if (tl) tl.innerHTML = '';
-      pageDiv.style.background = '#e2e8f0';
-    }
-    renderedPages.delete(pageIdx);
-    pageRenderedScale.delete(pageIdx);
-  });
+  cleanupOldPages(idx); // 只保留中心頁
 }
 
 let _pdfPrevScrollTop = 0;
@@ -829,69 +926,114 @@ window.addEventListener('drop', e => {
   if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files, 'auto');
 });
 
-/* ================= 品牌 / 上傳選單 ================= */
+/* ================= 語言 / 品牌 / 上傳選單 ================= */
 document.addEventListener('DOMContentLoaded', () => {
+  const closeAllMenus = () => {
+    document.querySelectorAll('.toolbar-dropdown-menu').forEach(m => {
+      m.classList.remove('open');
+      m.style.display = 'none';
+    });
+  };
+
+  // 語言
+  const btnLang = document.getElementById('btnLangSelect');
+  const langMenu = document.getElementById('langMenu');
+  const langLabels = { zh: '中', en: '英', id: '印', th: '泰' };
+  if (btnLang && langMenu) {
+    btnLang.addEventListener('click', e => {
+      e.stopPropagation();
+      const willOpen = !langMenu.classList.contains('open');
+      closeAllMenus();
+      if (willOpen) {
+        langMenu.classList.add('open');
+        langMenu.style.display = 'block';
+      }
+    });
+    langMenu.querySelectorAll('.lang-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const newLang = btn.dataset.lang;
+        closeAllMenus();
+        if (!newLang || newLang === selectedLocale) return;
+        selectedLocale = newLang;
+        btnLang.textContent = langLabels[newLang] || newLang;
+        // 同步舊 honda/kawasaki locale
+        if (newLang === 'id') { hondaLocale = 'id'; kawasakiLocale = 'id'; }
+        else if (newLang === 'th') { kawasakiLocale = 'th'; hondaLocale = 'jp'; }
+        else { hondaLocale = 'jp'; kawasakiLocale = 'th'; }
+
+        if (!currentPdfDoc) return;
+        await switchBrandAndReparseAll(selectedBrand || currentMode);
+      });
+    });
+  }
+
+  // 品牌
   const btnBrand = document.getElementById('btnBrandSelect');
   const brandMenu = document.getElementById('brandMenu');
   if (btnBrand && brandMenu) {
     btnBrand.addEventListener('click', e => {
       e.stopPropagation();
-      brandMenu.style.display = brandMenu.style.display === 'none' ? 'block' : 'none';
+      const willOpen = !brandMenu.classList.contains('open');
+      closeAllMenus();
+      if (willOpen) {
+        brandMenu.classList.add('open');
+        brandMenu.style.display = 'block';
+      }
     });
-
     brandMenu.querySelectorAll('.brand-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
         const newBrand = btn.dataset.brand;
-        brandMenu.style.display = 'none';
-
+        closeAllMenus();
+        if (!newBrand) return;
         const oldBrand = selectedBrand;
         selectedBrand = newBrand;
         currentMode = newBrand;
         btnBrand.textContent = newBrand === 'yamaha' ? 'Y' : (newBrand === 'honda' ? 'H' : 'K');
-        btnBrand.style.color = newBrand === 'yamaha' ? '#2563eb' : (newBrand === 'honda' ? '#dc2626' : '#16a34a');
-
+        btnBrand.classList.remove('brand-yamaha', 'brand-honda', 'brand-kawasaki');
+        btnBrand.classList.add('brand-' + newBrand);
         if (!currentPdfDoc) return;
         if (newBrand === oldBrand) return;
-
         await switchBrandAndReparseAll(newBrand);
       });
     });
-
-    document.addEventListener('click', () => { brandMenu.style.display = 'none'; });
   }
 
+  // 上傳
   const btnUpload = document.getElementById('btnUploadPdf');
   const uploadMenu = document.getElementById('uploadMenu');
   if (btnUpload && uploadMenu) {
     btnUpload.addEventListener('click', e => {
       e.stopPropagation();
-      uploadMenu.style.display = uploadMenu.style.display === 'none' ? 'block' : 'none';
-    });
-    document.addEventListener('click', e => {
-      if (!e.target.closest('#btnUploadPdf') && !e.target.closest('#uploadMenu')) {
-        uploadMenu.style.display = 'none';
+      const willOpen = !uploadMenu.classList.contains('open');
+      closeAllMenus();
+      if (willOpen) {
+        uploadMenu.classList.add('open');
+        uploadMenu.style.display = 'block';
       }
     });
-    document.getElementById('btnUploadPdfDirect')?.addEventListener('click', () => {
-      document.getElementById('fileInputAuto').click();
-      uploadMenu.style.display = 'none';
+    document.getElementById('btnUploadPdfDirect')?.addEventListener('click', e => {
+      e.stopPropagation();
+      closeAllMenus();
+      document.getElementById('fileInputAuto')?.click();
     });
     document.getElementById('btnUploadImg')?.addEventListener('click', e => {
       e.stopPropagation();
-      uploadMenu.style.display = 'none';
+      closeAllMenus();
       document.getElementById('fileInputImage')?.click();
     });
     document.getElementById('btnUploadMultiPdf')?.addEventListener('click', e => {
       e.stopPropagation();
-      uploadMenu.style.display = 'none';
+      closeAllMenus();
       document.getElementById('fileInputMultiPdf')?.click();
     });
     document.getElementById('btnDecrypt')?.addEventListener('click', e => {
       e.stopPropagation();
-      uploadMenu.style.display = 'none';
+      closeAllMenus();
       document.getElementById('fileInputDecrypt')?.click();
     });
   }
+
+  document.addEventListener('click', () => closeAllMenus());
 });
 
 /* ================= 品牌切換：重新解析並重繪 ================= */
@@ -1121,6 +1263,10 @@ async function loadPdf(file, mode = 'yamaha') {
           : 'Kawasaki 印尼/英文')
         : (hondaLocale === 'id' ? 'Honda 印尼' : hondaLocale === 'jp' ? 'Honda 日本' : 'Honda');
 
+    const okBrand = await ensureBrandParsersLoaded();
+    if (!okBrand) {
+      console.error('[epc] EPC_BRAND.yamaha still missing after late load');
+    }
     const total = pdf.numPages;
     for (let i = 1; i <= total; i++) {
       $('progressText').textContent = `正在打開手冊（${localeLabel}）… ${i} / ${total}`;
@@ -1162,11 +1308,33 @@ async function loadPdf(file, mode = 'yamaha') {
     rebuildAssemblyOptions();
     currentSelectValue = '0';
     updateCustomSelectUI(0);
+    console.log('[epc] parsed parts=', partInfoMap.size, 'pagesWithParts=', pagePartsMap.size);
     renderPartList('page', 0, true);
 
     await renderPagesInRange(0);
-    setTimeout(fitWidth, 100);
+    setTimeout(function () {
+      try {
+        // 載入後直接套用「取大者」最小縮放（貼滿寬或高）
+        applyZoom(getMinZoomScale());
+      } catch (e) {
+        try { fitWidth(); } catch (e2) {}
+      }
+    }, 120);
     setTimeout(() => { try { loadAllTitlesBackground(pdf, mode); } catch (e) {} }, 150);
+
+    // 手機無 Console：0 筆時在清單顯示診斷
+    if (partInfoMap.size === 0) {
+      var box = document.getElementById('partList');
+      var keys = Object.keys(window.EPC_BRAND || {});
+      var b = (typeof getBrand === 'function') ? getBrand(mode) : null;
+      var msg = '無零件資料。\n品牌鍵: ' + (keys.join(',') || '(空＝parsers未載入)') +
+        '\ngetBrand: ' + (b && b.id) +
+        '\nmode: ' + mode +
+        '\nlocale: ' + (typeof selectedLocale !== 'undefined' ? selectedLocale : '?') +
+        '\n請確認 index.html 有 <script src="parsers/yamaha.js">\n且檔案在 epc/parsers/yamaha.js';
+      if (box) box.innerHTML = '<pre style="font-size:11px;padding:12px;white-space:pre-wrap;color:#64748b;">' + msg + '</pre>';
+      console.warn('[epc] zero parts', msg);
+    }
 
   } catch (err) {
     console.error(err);
@@ -1405,25 +1573,82 @@ $('customSelectTrigger').addEventListener('click', (e) => {
 
 document.addEventListener('click', () => $('customOptions').classList.remove('open'));
 
+/**
+ * 將指定頁對齊到「PDF 瀏覽區」頂部（不是整頁視窗中心）
+ * 用 getBoundingClientRect 計算，避免 transform scale 造成 offsetTop 誤差
+ */
 function scrollToPage(pageIndex) {
-  const pageDiv = container.querySelector(`.page-container[data-page-index="${pageIndex}"]`);
-  if (!pageDiv) { renderPagesInRange(pageIndex); return; }
   navLockTarget = pageIndex;
   isScrollingProgrammatically = true;
   clearTimeout(navLockTimer);
-  const ratio = scale / RENDER_SCALE;
-  const targetTop = pageDiv.offsetTop * ratio;
-  viewport.scrollTo({ top: Math.max(0, targetTop - 20), behavior: 'auto' });
-  renderPagesInRange(pageIndex);
-  pageDiv.style.transition = 'box-shadow .25s';
-  pageDiv.style.boxShadow = '0 0 0 3px #fbbf24, 0 4px 16px rgba(251,191,36,0.55)';
-  navLockTimer = setTimeout(() => {
-    pageDiv.style.boxShadow = '';
+
+  // 換頁：清空其他頁快取，只保留目標頁
+  try {
+    if (typeof cleanupOldPages === 'function') cleanupOldPages(pageIndex);
+    // 強制目標頁可重新渲染（避免 has() 跳過）
+    renderedPages.delete(pageIndex);
+    pageRenderedScale.delete(pageIndex);
+    if (typeof pageRenderTasks !== 'undefined' && pageRenderTasks && pageRenderTasks.delete) {
+      pageRenderTasks.delete(pageIndex);
+    }
+  } catch (e) { console.warn('scrollToPage cache clear', e); }
+
+  const MARGIN_TOP = 8; // 與瀏覽區頂部預留
+
+  function alignPageTop() {
+    if (!viewport) return;
+    const pageDiv = container && container.querySelector('.page-container[data-page-index="' + pageIndex + '"]');
+    if (!pageDiv) return;
+    try {
+      const vRect = viewport.getBoundingClientRect();
+      const pRect = pageDiv.getBoundingClientRect();
+      // 對齊「瀏覽區內容區」頂部（扣除 padding），避免與視覺中心不一致
+      const padTop = parseFloat(getComputedStyle(viewport).paddingTop) || 0;
+      const delta = pRect.top - vRect.top - padTop - MARGIN_TOP;
+      if (Math.abs(delta) > 0.5) {
+        viewport.scrollTop = Math.max(0, viewport.scrollTop + delta);
+      }
+      try { updateHorizontalScrollLock(); } catch (e) {}
+    } catch (e) {
+      // 後備：舊算法
+      const ratio = scale / RENDER_SCALE;
+      const targetTop = pageDiv.offsetTop * ratio;
+      viewport.scrollTo({ top: Math.max(0, targetTop - MARGIN_TOP), behavior: 'auto' });
+    }
+  }
+
+  let pageDiv = container && container.querySelector('.page-container[data-page-index="' + pageIndex + '"]');
+  if (!pageDiv) {
+    // 先建佔位再對齊
+    Promise.resolve(renderPagesInRange(pageIndex)).then(function () {
+      requestAnimationFrame(function () {
+        alignPageTop();
+        requestAnimationFrame(alignPageTop);
+      });
+    });
+  } else {
+    alignPageTop();
+    // 渲染完成後高度可能變，再對齊一次
+    Promise.resolve(renderPagesInRange(pageIndex)).then(function () {
+      requestAnimationFrame(function () {
+        alignPageTop();
+        requestAnimationFrame(alignPageTop);
+      });
+    });
+    pageDiv.style.transition = 'box-shadow .25s';
+    pageDiv.style.boxShadow = '0 0 0 3px #fbbf24, 0 4px 16px rgba(251,191,36,0.55)';
+  }
+
+  navLockTimer = setTimeout(function () {
+    pageDiv = container && container.querySelector('.page-container[data-page-index="' + pageIndex + '"]');
+    if (pageDiv) pageDiv.style.boxShadow = '';
+    // 最後再對齊一次，確保與瀏覽區頂部一致
+    alignPageTop();
     if (navLockTarget === pageIndex) {
       isScrollingProgrammatically = false;
       navLockTarget = null;
     }
-  }, 450);
+  }, 480);
 }
 
 $('btnPrevPage').addEventListener('click', () => {
@@ -1568,23 +1793,82 @@ function highlightPartOnPage(key) {
   return true;
 }
 
-function jumpToPart(key) {
+function partExistsOnPage(key, pageIdx) {
+  if (key == null || pageIdx == null) return false;
+  const arr = pagePartsMap.get(pageIdx) || pagePartsMap.get(Number(pageIdx)) || [];
+  if (arr.some(function (p) { return p && partKeysEqual(p.partNo, key); })) return true;
+  const keys = pagePartKeys.get(pageIdx) || pagePartKeys.get(Number(pageIdx)) || [];
+  for (let i = 0; i < keys.length; i++) {
+    const k = typeof keys[i] === 'string' ? keys[i] : (keys[i] && (keys[i].partNo || keys[i].key));
+    if (k && partKeysEqual(k, key)) return true;
+  }
+  return false;
+}
+
+/**
+ * @param {string} key
+ * @param {object} [opts]
+ * @param {boolean} [opts.stayOnCurrent]  零件清單：只在當前頁高亮，不跳頁
+ * @param {boolean} [opts.preferCurrent]  PickList：當前頁有就留在當前頁，沒有才跳頁
+ * @param {number}  [opts.hintPage]       PickList 記錄的頁碼（當前頁沒有時優先）
+ */
+function jumpToPart(key, opts) {
   if (!key) return;
   if (!currentPdfDoc) { console.warn('no pdf'); return; }
+  opts = opts || {};
 
-  let targetPage = null;
-  for (const [pageIdx, partsArray] of pagePartsMap.entries()) {
-    const found = partsArray.find(p => partKeysEqual(p.partNo, key));
-    if (found) { targetPage = pageIdx; break; }
+  selectedKey = key;
+  const cur = currentPageIndex || 0;
+
+  // 零件清單：只處理當前頁
+  if (opts.stayOnCurrent) {
+    clearPartFocusHighlight();
+    if (!partExistsOnPage(key, cur)) {
+      // 當前頁沒有此零件：不跳頁，只更新選取樣式
+      try {
+        renderPartList(currentSelectValue === 'all' ? 'all' : 'page', cur, false);
+      } catch (e) {}
+      return;
+    }
+    if (!renderedPages.has(cur)) {
+      renderedPages.delete(cur);
+      renderPagesInRange(cur);
+    }
+    let tries = 0;
+    const tryHl = () => {
+      tries++;
+      if (highlightPartOnPage(key)) return;
+      if (tries >= 20) return;
+      setTimeout(tryHl, 120);
+    };
+    setTimeout(tryHl, 50);
+    return;
   }
-  if (targetPage === null) targetPage = findPageForPart(key);
+
+  // PickList：先當前頁，沒有再跳
+  let targetPage = null;
+  if (opts.preferCurrent && partExistsOnPage(key, cur)) {
+    targetPage = cur;
+  } else {
+    if (opts.hintPage != null && !isNaN(Number(opts.hintPage))) {
+      const hp = Number(opts.hintPage);
+      if (partExistsOnPage(key, hp)) targetPage = hp;
+    }
+    if (targetPage === null) {
+      for (const [pageIdx, partsArray] of pagePartsMap.entries()) {
+        const found = partsArray.find(p => partKeysEqual(p.partNo, key));
+        if (found) { targetPage = pageIdx; break; }
+      }
+    }
+    if (targetPage === null) targetPage = findPageForPart(key);
+  }
+
   if (targetPage === null || targetPage === undefined) {
     alert('找不到此零件所在的 PDF 頁面。');
     return;
   }
 
   const alreadyOnPage = (currentPageIndex === targetPage);
-  selectedKey = key;
 
   if (currentSelectValue !== 'all') {
     currentSelectValue = String(targetPage);
@@ -1593,16 +1877,14 @@ function jumpToPart(key) {
 
   if (!alreadyOnPage) {
     currentPageIndex = targetPage;
-    // 跳到不同頁：清除舊頁快取並強制重新渲染
     renderedPages.clear();
     pageRenderedScale.clear();
     renderPartList('page', targetPage, false);
     scrollToPage(targetPage);
   } else {
-    // 同頁：清除舊頁快取後重新渲染
     cleanupOffscreenPages(currentPageIndex);
     renderedPages.delete(currentPageIndex);
-    renderPartList('page', targetPage, false);
+    renderPartList(currentSelectValue === 'all' ? 'all' : 'page', targetPage, false);
     renderPagesInRange(targetPage);
   }
 
@@ -1633,8 +1915,8 @@ function renderPartList(mode = 'page', pageIdx = 0, scrollToTop = false) {
     });
     renderItems = keys.sort((a, b) => {
       const infoA = partInfoMap.get(a), infoB = partInfoMap.get(b);
-      const numA = parseInt(infoA && infoA.itemNo, 10) || 999;
-      const numB = parseInt(infoB && infoB.itemNo, 10) || 999;
+      const numA = parseFloat(infoA && infoA.itemNo) || 999;
+      const numB = parseFloat(infoB && infoB.itemNo) || 999;
       return numA - numB;
     });
   } else if (mode === 'all') {
@@ -1646,14 +1928,16 @@ function renderPartList(mode = 'page', pageIdx = 0, scrollToTop = false) {
       return numA - numB;
     });
   } else {
-    renderItems = pagePartsMap.get(pageIdx) || [];
-    if (renderItems.length === 0) renderItems = pagePartKeys.get(pageIdx) || [];
+    renderItems = pagePartsMap.get(pageIdx) || pagePartsMap.get(Number(pageIdx)) || [];
+    if (renderItems.length === 0) renderItems = pagePartKeys.get(pageIdx) || pagePartKeys.get(Number(pageIdx)) || [];
   }
 
   $('listCount').textContent = renderItems.length;
 
   if (!renderItems.length) {
-    box.innerHTML = `<p style="color:var(--muted);font-size:13px;text-align:center;padding:30px 14px;">無零件資料。</p>`;
+    const totalAll = partInfoMap ? partInfoMap.size : 0;
+    const brandId = ((typeof getBrand === 'function' && getBrand(currentMode)) || {}).id || '?';
+    box.innerHTML = `<p style="color:var(--muted);font-size:13px;text-align:center;padding:30px 14px;">無零件資料。<br><span style="font-size:11px;opacity:.8">總共 ${totalAll} 筆 · 本頁 ${pageIdx} · ${brandId}</span></p>`;
     if (scrollToTop) box.scrollTop = 0;
     return;
   }
@@ -1667,11 +1951,11 @@ function renderPartList(mode = 'page', pageIdx = 0, scrollToTop = false) {
       if (e.target.closest('.add-btn')) return;
       const key = row.dataset.key;
       selectedKey = key;
-      if (key) jumpToPart(key);
+      if (key) jumpToPart(key, { stayOnCurrent: true });
       else renderPartList(mode, pageIdx);
     });
     row.style.cursor = 'pointer';
-    row.title = '點擊：跳至 PDF 位置';
+    row.title = '點擊：在當前頁高亮（不跳頁）';
   };
   const bindBtn = (btn) => {
     btn.addEventListener('click', e => {
@@ -1902,8 +2186,11 @@ function renderPickList() {
         r.classList.toggle('selected', partKeysEqual(r.dataset.key, partKey));
       });
 
-      if (!isNaN(pIdx)) currentPageIndex = pIdx;
-      jumpToPart(partKey);
+      // PickList：先試當前頁，沒有才跳到零件所在頁
+      jumpToPart(partKey, {
+        preferCurrent: true,
+        hintPage: isNaN(pIdx) ? undefined : pIdx
+      });
     });
   });
   box.querySelectorAll('[data-pk-dec]').forEach(b => b.onclick = (e) => {
@@ -2173,8 +2460,19 @@ document.getElementById('btnCalc')?.addEventListener('click', () => {
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
-      .then(() => console.log('SW 註冊成功'))
+    navigator.serviceWorker.register('sw.js?v=20261122b')
+      .then(function (reg) {
+        console.log('SW 註冊成功');
+        try { reg.update(); } catch (e) {}
+      })
       .catch(err => console.error('SW 註冊失敗:', err));
+    // 清掉舊 cache（避免手機一直用舊 yamaha.js）
+    if (window.caches && caches.keys) {
+      caches.keys().then(function (keys) {
+        keys.forEach(function (k) {
+          if (k !== 'mot-cache-v20261122b') caches.delete(k);
+        });
+      });
+    }
   });
 }
