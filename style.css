@@ -262,12 +262,15 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
   @media (orientation: portrait) {
     .layout { flex-direction: column !important; }
     .layout .left-pane { flex: 1 1 auto !important; min-height: 0 !important; order: 1 !important; }
+    /* 直屏展開：側欄固定高度，不因零件數量／換頁改變 */
     .layout .sidebar {
-      flex: 0 0 auto !important;
-      height: auto !important;
-      max-height: min(42dvh, calc(100dvh - 180px - env(safe-area-inset-bottom, 0px))) !important;
-      min-height: 200px !important;
-      width: 100% !important; max-width: 100% !important; min-width: 100% !important;
+      flex: 0 0 42dvh !important;
+      height: 42dvh !important;
+      max-height: 42dvh !important;
+      min-height: 42dvh !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 100% !important;
       order: 2 !important;
       border-left: none !important;
       border-top: 1px solid var(--line) !important;
@@ -285,9 +288,18 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
       display: flex !important;
       flex-direction: column !important;
     }
+    .layout .sidebar .part-list,
+    .layout .sidebar .picklist-list {
+      flex: 1 1 auto !important;
+      min-height: 0 !important;
+      overflow-y: auto !important;
+      -webkit-overflow-scrolling: touch;
+    }
     .layout .left-pane {
       flex: 1 1 auto !important;
-      min-height: 30dvh !important;
+      min-height: 0 !important;
+      height: auto !important;
+      max-height: none !important;
     }
 
     .epc-toolbar {
