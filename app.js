@@ -2440,22 +2440,33 @@ function setSidebarCollapsed(collapsed) {
   } catch (e) {}
 }
 
-document.getElementById('btnCalc')?.addEventListener('click', () => {
-  const leftPane = document.querySelector('.left-pane');
-  if (!leftPane) return;
+function isLandscape() {
+  try {
+    return window.matchMedia && window.matchMedia('(orientation: landscape)').matches;
+  } catch (e) {
+    return window.innerWidth > window.innerHeight;
+  }
+}
+
+function openCalc() {
+  const layout = document.querySelector('.layout');
+  if (!layout) return;
   let calcFrame = document.getElementById('calcIframeContainer');
+  const landscape = isLandscape();
+
   if (calcFrame) {
     calcFrame.style.display = 'flex';
+    applyCalcMode(calcFrame, landscape);
+    layout.classList.add('calc-open');
     setSidebarCollapsed(true);
     return;
   }
 
-  // 開啟計算機 → 收合側欄（計算機仍只蓋在左側 PDF 區，非全螢幕）
+  layout.classList.add('calc-open');
   setSidebarCollapsed(true);
 
   calcFrame = document.createElement('div');
   calcFrame.id = 'calcIframeContainer';
-  calcFrame.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;background:#fff;z-index:1000;display:flex;flex-direction:column;';
 
   const header = document.createElement('div');
   header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;background:#f5f6f8;border-bottom:1px solid #e3e6ea;padding:0 16px;height:44px;flex-shrink:0;';
@@ -2468,7 +2479,9 @@ document.getElementById('btnCalc')?.addEventListener('click', () => {
   closeBtn.onmouseout = () => { closeBtn.style.background = 'none'; };
   closeBtn.onclick = () => {
     calcFrame.remove();
-    setSidebarCollapsed(false); // 關閉 → 展開側欄
+    layout.classList.remove('calc-open');
+    document.body.classList.remove('calc-fullscreen');
+    setSidebarCollapsed(false);
   };
   header.appendChild(closeBtn);
 
@@ -2478,8 +2491,52 @@ document.getElementById('btnCalc')?.addEventListener('click', () => {
 
   calcFrame.appendChild(header);
   calcFrame.appendChild(iframe);
-  leftPane.style.position = 'relative';
-  leftPane.appendChild(calcFrame);
+  applyCalcMode(calcFrame, landscape);
+  // 全屏掛 body；非全屏掛 layout
+  if (landscape) document.body.appendChild(calcFrame);
+  else {
+    layout.style.position = 'relative';
+    layout.appendChild(calcFrame);
+  }
+}
+
+function applyCalcMode(calcFrame, landscape) {
+  if (!calcFrame) return;
+  if (landscape) {
+    document.body.classList.add('calc-fullscreen');
+    calcFrame.classList.add('calc-fs');
+    // 橫屏全螢幕：貼齊螢幕，安全區交給 calc.html 內部處理
+    calcFrame.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;width:100%;height:100%;margin:0;padding:0;background:#f1f5f9;z-index:5000;display:flex;flex-direction:column;box-sizing:border-box;';
+    if (calcFrame.parentElement !== document.body) document.body.appendChild(calcFrame);
+  } else {
+    document.body.classList.remove('calc-fullscreen');
+    calcFrame.classList.remove('calc-fs');
+    calcFrame.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;background:#fff;z-index:1200;display:flex;flex-direction:column;';
+    const layout = document.querySelector('.layout');
+    if (layout && calcFrame.parentElement !== layout) {
+      layout.style.position = 'relative';
+      layout.appendChild(calcFrame);
+    }
+  }
+  // 保持 header/iframe 結構
+  const header = calcFrame.querySelector('div');
+  const iframe = calcFrame.querySelector('iframe');
+  if (header) header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;background:#f5f6f8;border-bottom:1px solid #e3e6ea;padding:0 16px;height:44px;flex-shrink:0;';
+  if (iframe) iframe.style.cssText = 'flex:1;width:100%;border:none;background:#fff;';
+}
+
+document.getElementById('btnCalc')?.addEventListener('click', openCalc);
+
+// 旋轉時若計算機開著，切換全屏／非全屏
+window.addEventListener('orientationchange', function () {
+  const calcFrame = document.getElementById('calcIframeContainer');
+  if (!calcFrame) return;
+  setTimeout(function () { applyCalcMode(calcFrame, isLandscape()); }, 100);
+});
+window.addEventListener('resize', function () {
+  const calcFrame = document.getElementById('calcIframeContainer');
+  if (!calcFrame) return;
+  applyCalcMode(calcFrame, isLandscape());
 });
 
 //--------以下是下載到手機--------//
