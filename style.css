@@ -1221,119 +1221,114 @@ html.ios-standalone .pwa-safe-top {
 }
 
 
-/* ========== iOS PWA：頂部白底遮罩 + 底部側欄貼齊 ========== */
 
-/* 預設：非 PWA 不佔高 */
-.pwa-safe-top {
-  height: 0;
-  min-height: 0;
-  overflow: hidden;
-}
 
-html.ios-standalone .pwa-safe-top {
-  display: block !important;
-  flex: 0 0 auto !important;
-  flex-shrink: 0 !important;
-  width: 100% !important;
-  background: #ffffff !important;
-  /* Dynamic Island / 狀態列：至少 47px，有 env 則取较大 */
+/* ========================================== */
+/* iOS PWA 手術級修正（最高優先、寫在檔案末尾） */
+/* ========================================== */
+
+/* 1. 強制上方白底（含 Dynamic Island）— 用 ID 提高優先級 */
+#pwaSafeTop {
   height: 47px !important;
   min-height: 47px !important;
-  height: max(47px, env(safe-area-inset-top, 47px)) !important;
-  min-height: max(47px, env(safe-area-inset-top, 47px)) !important;
-  z-index: 200;
+  max-height: none !important;
+  background: #ffffff !important;
+  width: 100% !important;
+  z-index: 200 !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  position: relative !important;
+  display: block !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
 }
 
-html.ios-standalone .epc-toolbar {
+/* 非 standalone 時仍可為 0（瀏覽器有自己的狀態列） */
+@media (display-mode: browser) {
+  #pwaSafeTop {
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+}
+
+.epc-toolbar {
   background: #ffffff !important;
   opacity: 1 !important;
   filter: none !important;
   -webkit-backdrop-filter: none !important;
   backdrop-filter: none !important;
-  box-shadow: 0 1px 0 #e8ecf1;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.06);
+  position: relative;
+  z-index: 50;
 }
-
-html.ios-standalone .epc-toolbar .search-group input {
+.epc-toolbar input,
+.epc-toolbar button {
+  opacity: 1 !important;
+  -webkit-text-fill-color: inherit !important;
+}
+.epc-toolbar .search-group input {
   background: #ffffff !important;
   color: #0f172a !important;
-  -webkit-text-fill-color: #0f172a !important;
-  opacity: 1 !important;
   border: 1px solid #94a3b8 !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+.epc-toolbar .toolbar-btn {
+  background: #f1f5f9 !important;
 }
 
-html.ios-standalone body {
-  padding-bottom: 0 !important;
-}
-
-html.ios-standalone .sidebar {
-  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
-  box-sizing: border-box !important;
-  background: #ffffff !important;
-}
-
-/* 收合：高度 = 48px tab + 底部安全區，貼齊螢幕底 */
-html.ios-standalone .layout.panel-collapsed .sidebar-body {
+/* 2. 收合側欄：只留 tab + 底部安全區 */
+.layout.panel-collapsed .sidebar-body {
   display: none !important;
   height: 0 !important;
   max-height: 0 !important;
-  flex: 0 0 0 !important;
+  min-height: 0 !important;
   overflow: hidden !important;
+  visibility: hidden !important;
+  flex: 0 0 0 !important;
   padding: 0 !important;
   margin: 0 !important;
 }
-
-html.ios-standalone .layout.panel-collapsed .sidebar {
+.layout.panel-collapsed .sidebar {
   flex: 0 0 auto !important;
   height: auto !important;
   max-height: none !important;
   min-height: 0 !important;
+  padding-bottom: 0 !important;
   margin: 0 !important;
-  padding: 0 !important;
+  background: #fff !important;
+  width: 100% !important;
   overflow: hidden !important;
-  background: #ffffff !important;
+  box-sizing: border-box !important;
 }
-
-html.ios-standalone .layout.panel-collapsed .sidebar-tabs {
+.layout.panel-collapsed .sidebar-tabs {
   height: 48px !important;
   min-height: 48px !important;
   max-height: 48px !important;
-  padding-top: 0 !important;
-  padding-left: 4px !important;
-  padding-right: 4px !important;
   padding-bottom: env(safe-area-inset-bottom, 0px) !important;
   box-sizing: content-box !important;
-  margin: 0 !important;
-  background: #ffffff !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  background: #fff !important;
   border-top: 1px solid #e2e8f0 !important;
+  margin: 0 !important;
 }
-
-html.ios-standalone .layout.panel-collapsed .left-pane {
+.layout.panel-collapsed .left-pane {
   flex: 1 1 auto !important;
   min-height: 0 !important;
 }
 
-@media (display-mode: standalone) {
-  .pwa-safe-top {
-    display: block !important;
-    flex-shrink: 0 !important;
-    width: 100% !important;
-    background: #ffffff !important;
-    height: max(47px, env(safe-area-inset-top, 47px)) !important;
-    min-height: max(47px, env(safe-area-inset-top, 47px)) !important;
-  }
-  .epc-toolbar {
-    background: #ffffff !important;
-    opacity: 1 !important;
-  }
-  .layout.panel-collapsed .sidebar-body {
-    display: none !important;
-    height: 0 !important;
-  }
-  .layout.panel-collapsed .sidebar-tabs {
-    height: 48px !important;
-    min-height: 48px !important;
-    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
-    box-sizing: content-box !important;
-    background: #fff !important;
-  }
+/* standalone 再加一層 */
+html.ios-standalone #pwaSafeTop,
+body.ios-standalone #pwaSafeTop {
+  height: 47px !important;
+  min-height: 47px !important;
+  background: #ffffff !important;
+  display: block !important;
+}
+html.ios-standalone .epc-toolbar {
+  background: #ffffff !important;
+  opacity: 1 !important;
 }
