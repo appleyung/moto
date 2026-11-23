@@ -1128,3 +1128,96 @@ html.ios-standalone .epc-toolbar {
   background: #fff !important;
   opacity: 1 !important;
 }
+
+
+/* ========== 收合：只留一列 tab（所有模式強制） ========== */
+.layout.panel-collapsed .sidebar-body {
+  display: none !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  visibility: hidden !important;
+  flex: 0 0 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+}
+.layout.panel-collapsed .sidebar {
+  flex: 0 0 auto !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: #fff !important;
+}
+.layout.panel-collapsed .sidebar-tabs {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  max-height: 48px !important;
+  padding: 0 4px !important;
+  padding-bottom: constant(safe-area-inset-bottom, 0px) !important;
+  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  box-sizing: content-box !important;
+  margin: 0 !important;
+  background: #fff !important;
+  border-top: 1px solid #e2e8f0 !important;
+}
+.layout.panel-collapsed .left-pane {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+}
+
+/* 工具列強制實心 */
+.epc-toolbar {
+  background: #ffffff !important;
+  opacity: 1 !important;
+  filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: 0 1px 0 #e2e8f0;
+}
+.epc-toolbar .search-group input {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #94a3b8 !important;
+  opacity: 1 !important;
+  -webkit-text-fill-color: #0f172a;
+}
+.epc-toolbar .toolbar-btn {
+  background: #f1f5f9 !important;
+  opacity: 1 !important;
+}
+html.ios-standalone .epc-toolbar,
+html.ios-standalone .pwa-safe-top {
+  background: #ffffff !important;
+  opacity: 1 !important;
+}
+@media (display-mode: standalone) {
+  .layout.panel-collapsed .sidebar {
+    flex: 0 0 auto !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+  }
+  .layout.panel-collapsed .sidebar-body {
+    display: none !important;
+    height: 0 !important;
+  }
+  .layout.panel-collapsed .sidebar-tabs {
+    height: 48px !important;
+    min-height: 48px !important;
+    max-height: 48px !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    box-sizing: content-box !important;
+  }
+  .epc-toolbar {
+    background: #ffffff !important;
+    opacity: 1 !important;
+  }
+}
