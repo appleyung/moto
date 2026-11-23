@@ -2401,12 +2401,13 @@ $('btnExcel').addEventListener('click', () => {
     const tabs = layout.querySelector('.sidebar-tabs');
     if (!sidebar) return;
     if (collapsed) {
-      // 強制只留 tab 列，避開 CSS 優先權問題（iOS standalone）
       if (body) {
         body.style.display = 'none';
         body.style.height = '0';
+        body.style.maxHeight = '0';
         body.style.overflow = 'hidden';
         body.style.flex = '0 0 0px';
+        body.style.visibility = 'hidden';
       }
       sidebar.style.flex = '0 0 auto';
       sidebar.style.height = 'auto';
@@ -2423,17 +2424,25 @@ $('btnExcel').addEventListener('click', () => {
         tabs.style.boxSizing = 'content-box';
       }
     } else {
+      // 展開：清掉收合時寫入的 inline，避免「分頁列與清單分離」
       if (body) {
         body.style.display = '';
         body.style.height = '';
+        body.style.maxHeight = '';
         body.style.overflow = '';
         body.style.flex = '';
+        body.style.visibility = '';
+        body.removeAttribute('style');
       }
       sidebar.style.flex = '';
       sidebar.style.height = '';
       sidebar.style.maxHeight = '';
       sidebar.style.minHeight = '';
       sidebar.style.overflow = '';
+      // 只清我們設過的，保留 class 相關
+      ['flex','height','maxHeight','minHeight','overflow'].forEach(function (k) {
+        sidebar.style[k] = '';
+      });
       if (tabs) {
         tabs.style.height = '';
         tabs.style.minHeight = '';
@@ -2446,6 +2455,10 @@ $('btnExcel').addEventListener('click', () => {
       if (typeof updateHorizontalScrollLock === 'function') updateHorizontalScrollLock();
     } catch (err) {}
   }
+  // 供計算機開關呼叫
+  window.applySidebarCollapseLayout = applyCollapseLayout;
+  window.syncSidebarCollapseIcon = syncIcon;
+
 
   btn.addEventListener('click', e => {
     e.stopPropagation();
@@ -2511,6 +2524,8 @@ document.getElementById('fileInputImage')?.addEventListener('change', async (e) 
 });
 
 /* ================= 計算機 ================= */
+let _sidebarCollapsedBeforeCalc = false;
+
 function setSidebarCollapsed(collapsed) {
   const layout = document.querySelector('.layout');
   const btn = document.getElementById('btnSidebarCollapse');
@@ -2518,6 +2533,11 @@ function setSidebarCollapsed(collapsed) {
   if (collapsed) layout.classList.add('panel-collapsed');
   else layout.classList.remove('panel-collapsed');
   if (btn) btn.textContent = collapsed ? '放' : '收';
+  // 同步清／設 inline，避免關計算機後分頁與清單脫節
+  try {
+    if (typeof window.applySidebarCollapseLayout === 'function') window.applySidebarCollapseLayout();
+    if (typeof window.syncSidebarCollapseIcon === 'function') window.syncSidebarCollapseIcon();
+  } catch (e) {}
   try {
     if (typeof updateHorizontalScrollLock === 'function') updateHorizontalScrollLock();
     if (typeof getMinZoomScale === 'function' && typeof applyZoom === 'function' && currentPdfDoc) {
@@ -2549,6 +2569,7 @@ function openCalc() {
     return;
   }
 
+  _sidebarCollapsedBeforeCalc = layout.classList.contains('panel-collapsed');
   layout.classList.add('calc-open');
   setSidebarCollapsed(true);
 
@@ -2568,7 +2589,8 @@ function openCalc() {
     calcFrame.remove();
     layout.classList.remove('calc-open');
     document.body.classList.remove('calc-fullscreen');
-    setSidebarCollapsed(false);
+    // 恢復開啟計算機前的收合狀態，並清掉殘留 inline
+    setSidebarCollapsed(!!_sidebarCollapsedBeforeCalc);
   };
   header.appendChild(closeBtn);
 
