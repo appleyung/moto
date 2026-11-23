@@ -1013,6 +1013,6 @@ html, body, .layout, .left-pane, .sidebar, .epc-toolbar,
 
 /* iPhone 主畫面 App：整窗下移 5px */
 html.ios-standalone body {
-  padding-top: 15px !important;
+  padding-top: 30px !important;
   box-sizing: border-box !important;
 }
