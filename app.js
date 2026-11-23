@@ -1,4 +1,35 @@
 
+(function forceIosPwaChrome() {
+  function apply() {
+    var standalone = document.documentElement.classList.contains('ios-standalone') ||
+      (window.navigator.standalone === true);
+    if (!standalone) return;
+    document.documentElement.classList.add('ios-standalone');
+    var top = document.getElementById('pwaSafeTop');
+    if (top) {
+      var inset = 0;
+      try {
+        var probe = document.createElement('div');
+        probe.style.cssText = 'position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top,0px);';
+        document.body.appendChild(probe);
+        inset = parseFloat(getComputedStyle(probe).paddingTop) || 0;
+        probe.remove();
+      } catch (e) {}
+      var h = Math.max(47, inset || 47);
+      top.style.cssText = 'display:block;flex-shrink:0;width:100%;height:' + h + 'px;min-height:' + h + 'px;background:#fff;z-index:200;';
+    }
+    var bar = document.querySelector('.epc-toolbar');
+    if (bar) {
+      bar.style.background = '#ffffff';
+      bar.style.opacity = '1';
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply);
+  else apply();
+  window.addEventListener('resize', apply);
+})();
+
+
 /* iOS 主畫面 App 模式標記（Safari 有時不支援 display-mode） */
 (function () {
   try {
