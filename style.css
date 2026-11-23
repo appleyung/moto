@@ -303,10 +303,37 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
     .epc-toolbar .upload-dropdown #uploadMenu { left: auto; right: 0; }
 
     .layout.panel-collapsed { flex-direction: column !important; }
-    .layout.panel-collapsed .left-pane { flex: 1 1 100% !important; height: auto !important; max-height: none !important; }
-    .layout.panel-collapsed .sidebar { flex: 0 0 48px !important; height: 48px !important; max-height: 48px !important; overflow: visible !important; }
-    .layout.panel-collapsed .sidebar-tabs { position: static !important; width: 100% !important; height: 100% !important; flex-direction: row !important; padding: 0 4px !important; border: none !important; background: transparent; }
-    .layout.panel-collapsed .sidebar-tab, .layout.panel-collapsed .sidebar-collapse-btn, .layout.panel-collapsed #btnCalc { writing-mode: horizontal-tb !important; width: auto !important; height: 100% !important; border: none !important; padding: 0 8px !important; margin: 0 !important; }
+    .layout.panel-collapsed .left-pane { flex: 1 1 auto !important; min-height: 0 !important; height: auto !important; max-height: none !important; }
+    .layout.panel-collapsed .sidebar {
+      flex: 0 0 auto !important;
+      height: auto !important;
+      max-height: none !important;
+      min-height: 0 !important;
+      overflow: hidden !important;
+    }
+    .layout.panel-collapsed .sidebar-body { display: none !important; height: 0 !important; overflow: hidden !important; }
+    .layout.panel-collapsed .sidebar-tabs {
+      position: static !important;
+      width: 100% !important;
+      height: 48px !important;
+      min-height: 48px !important;
+      flex-direction: row !important;
+      padding: 0 4px !important;
+      padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+      box-sizing: content-box !important;
+      border: none !important;
+      background: #fff !important;
+    }
+    .layout.panel-collapsed .sidebar-tab,
+    .layout.panel-collapsed .sidebar-collapse-btn,
+    .layout.panel-collapsed #btnCalc {
+      writing-mode: horizontal-tb !important;
+      width: auto !important;
+      height: 48px !important;
+      border: none !important;
+      padding: 0 8px !important;
+      margin: 0 !important;
+    }
   }
 
   /* 手機橫向 (Landscape) - 預留更多空間給右上角工具列 */
@@ -756,18 +783,28 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
 }
 
 @media (max-width: 1024px) {
+  /* 收合：只留 tab 列 + 底部安全區，清單本體隱藏 */
+  .layout.panel-collapsed .sidebar-body {
+    display: none !important;
+    height: 0 !important;
+    max-height: 0 !important;
+    overflow: hidden !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
   .layout.panel-collapsed .sidebar {
     flex: 0 0 auto !important;
     height: auto !important;
     max-height: none !important;
-    min-height: calc(48px + env(safe-area-inset-bottom, 0px)) !important;
-    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
-    overflow: visible !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    padding-bottom: 0 !important;
     box-sizing: border-box !important;
   }
   .layout.panel-collapsed .sidebar-tabs {
-    min-height: 48px;
-    height: auto !important;
-    padding-bottom: max(6px, env(safe-area-inset-bottom, 0px)) !important;
+    height: 48px !important;
+    min-height: 48px !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    box-sizing: content-box !important;
   }
 }
