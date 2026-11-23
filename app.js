@@ -1,3 +1,12 @@
+
+/* iOS 主畫面 App 模式標記（Safari 有時不支援 display-mode） */
+(function () {
+  try {
+    var standalone = (window.navigator.standalone === true) ||
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    if (standalone) document.documentElement.classList.add('ios-standalone');
+  } catch (e) {}
+})();
 /* ============================================================
  * EPC Viewer — app.js (v33)
  * 職責：UI、渲染、虛擬化、縮放、滾動、PickList、匯出、檔案處理
