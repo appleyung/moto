@@ -2424,31 +2424,57 @@ document.getElementById('fileInputImage')?.addEventListener('change', async (e) 
 });
 
 /* ================= 計算機 ================= */
+function setSidebarCollapsed(collapsed) {
+  const layout = document.querySelector('.layout');
+  const btn = document.getElementById('btnSidebarCollapse');
+  if (!layout) return;
+  if (collapsed) layout.classList.add('panel-collapsed');
+  else layout.classList.remove('panel-collapsed');
+  if (btn) btn.textContent = collapsed ? '放' : '收';
+  try {
+    if (typeof updateHorizontalScrollLock === 'function') updateHorizontalScrollLock();
+    if (typeof getMinZoomScale === 'function' && typeof applyZoom === 'function' && currentPdfDoc) {
+      const minZ = getMinZoomScale();
+      if (scale < minZ - 0.001) applyZoom(minZ);
+    }
+  } catch (e) {}
+}
+
 document.getElementById('btnCalc')?.addEventListener('click', () => {
   const leftPane = document.querySelector('.left-pane');
   if (!leftPane) return;
   let calcFrame = document.getElementById('calcIframeContainer');
-  if (calcFrame) { calcFrame.style.display = 'flex'; return; }
+  if (calcFrame) {
+    calcFrame.style.display = 'flex';
+    setSidebarCollapsed(true);
+    return;
+  }
+
+  // 開啟計算機 → 收合側欄（計算機仍只蓋在左側 PDF 區，非全螢幕）
+  setSidebarCollapsed(true);
 
   calcFrame = document.createElement('div');
   calcFrame.id = 'calcIframeContainer';
-  calcFrame.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: #fff; z-index: 1000; display: flex; flex-direction: column;';
+  calcFrame.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;background:#fff;z-index:1000;display:flex;flex-direction:column;';
 
   const header = document.createElement('div');
-  header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; background: #f5f6f8; border-bottom: 1px solid #e3e6ea; padding: 0 16px; height: 44px; flex-shrink: 0;';
-  header.innerHTML = '<span style="font-weight: bold; font-size: 15px; color: #1f2933;">計算機</span>';
+  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;background:#f5f6f8;border-bottom:1px solid #e3e6ea;padding:0 16px;height:44px;flex-shrink:0;';
+  header.innerHTML = '<span style="font-weight:bold;font-size:15px;color:#1f2933;">計算機</span>';
 
   const closeBtn = document.createElement('button');
   closeBtn.innerHTML = '✕ 關閉';
-  closeBtn.style.cssText = 'background: none; border: none; color: #dc2626; font-size: 14px; cursor: pointer; font-weight: bold; padding: 4px 8px; border-radius: 4px;';
-  closeBtn.onmouseover = () => closeBtn.style.background = '#fee2e2';
-  closeBtn.onmouseout = () => closeBtn.style.background = 'none';
-  closeBtn.onclick = () => { calcFrame.remove(); };
+  closeBtn.style.cssText = 'background:none;border:none;color:#dc2626;font-size:14px;cursor:pointer;font-weight:bold;padding:4px 8px;border-radius:4px;';
+  closeBtn.onmouseover = () => { closeBtn.style.background = '#fee2e2'; };
+  closeBtn.onmouseout = () => { closeBtn.style.background = 'none'; };
+  closeBtn.onclick = () => {
+    calcFrame.remove();
+    setSidebarCollapsed(false); // 關閉 → 展開側欄
+  };
   header.appendChild(closeBtn);
 
   const iframe = document.createElement('iframe');
   iframe.src = 'calc.html';
-  iframe.style.cssText = 'flex: 1; width: 100%; border: none; background: #fff;';
+  iframe.style.cssText = 'flex:1;width:100%;border:none;background:#fff;';
 
   calcFrame.appendChild(header);
   calcFrame.appendChild(iframe);
