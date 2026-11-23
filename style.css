@@ -761,7 +761,7 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
 }
 .pdf-viewport {
   position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow: auto; padding: 12px;
-  -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y;
+  -webkit-overflow-scrolling: touch; touch-action: manipulation;
 }
 #emptyState { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; color: #ddd; pointer-events: none; z-index: 5; width: 100%; padding: 0 20px; }
 #emptyState p { font-size: 60px; margin: 0; }
@@ -770,7 +770,7 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
 .pdf-scale-wrapper { position: relative; margin: 0 auto; }
 .pdf-container { display: flex; flex-direction: column; align-items: center; gap: 20px; transform-origin: 0 0; margin: 0; width: fit-content; will-change: transform; }
 .page-container { position: relative; background: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
-.page-container canvas { display: block; }
+.page-container canvas { display: block; touch-action: manipulation; }
 .page-container.placeholder { background: #e2e8f0; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 14px; }
 .textLayer { position: absolute; left: 0; top: 0; right: 0; bottom: 0; overflow: hidden; line-height: 1; transform-origin: 0 0; pointer-events: none; --scale-factor: 1; }
 .textLayer > span { color: transparent; position: absolute; white-space: pre; cursor: inherit; transform-origin: 0% 0%; pointer-events: none; }
@@ -997,4 +997,22 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
 }
 #calcIframeContainer {
   background: #fff;
+}
+
+
+/* 禁止連續點擊雙擊放大（手機瀏覽器） */
+.pdf-viewport,
+.pdf-viewport *,
+.page-container,
+.page-container canvas,
+.pdf-scale-wrapper,
+.pdf-container {
+  touch-action: manipulation !important;
+}
+
+
+/* 全頁禁止雙擊放大，仍允許捲動與雙指縮放（由 JS 處理） */
+html, body, .layout, .left-pane, .sidebar, .epc-toolbar,
+.sidebar-tabs, .sidebar-body, .part-list, .picklist-list {
+  touch-action: manipulation;
 }
