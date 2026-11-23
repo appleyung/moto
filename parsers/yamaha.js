@@ -328,4 +328,11 @@
     // 供 app.js 的 detectManualKind 使用（若未來需要）
     detect: function () { return 100; }
   };
+
+  if (global.EPC_BRAND && global.EPC_BRAND['yamaha']) {
+    ['yamaha-en','yamaha-id','yamaha-th','yamaha-zh'].forEach(function (id) {
+      global.EPC_BRAND[id] = Object.assign({}, global.EPC_BRAND['yamaha'], { id: id });
+    });
+  }
 })(typeof window !== 'undefined' ? window : globalThis);
+
