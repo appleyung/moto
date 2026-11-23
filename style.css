@@ -46,11 +46,9 @@ body {
 /* 頂部安全區實心條（Dynamic Island / 狀態列下方不透明） */
 .pwa-safe-top {
   flex: 0 0 auto;
-  height: constant(safe-area-inset-top, 0px);
-  height: env(safe-area-inset-top, 0px);
-  min-height: constant(safe-area-inset-top, 0px);
-  min-height: env(safe-area-inset-top, 0px);
-  background: #ffffff !important;
+  height: 0;
+  min-height: 0;
+  background: #ffffff;
   width: 100%;
   z-index: 200;
   flex-shrink: 0;
@@ -1219,5 +1217,123 @@ html.ios-standalone .pwa-safe-top {
   .epc-toolbar {
     background: #ffffff !important;
     opacity: 1 !important;
+  }
+}
+
+
+/* ========== iOS PWA：頂部白底遮罩 + 底部側欄貼齊 ========== */
+
+/* 預設：非 PWA 不佔高 */
+.pwa-safe-top {
+  height: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+html.ios-standalone .pwa-safe-top {
+  display: block !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  width: 100% !important;
+  background: #ffffff !important;
+  /* Dynamic Island / 狀態列：至少 47px，有 env 則取较大 */
+  height: 47px !important;
+  min-height: 47px !important;
+  height: max(47px, env(safe-area-inset-top, 47px)) !important;
+  min-height: max(47px, env(safe-area-inset-top, 47px)) !important;
+  z-index: 200;
+}
+
+html.ios-standalone .epc-toolbar {
+  background: #ffffff !important;
+  opacity: 1 !important;
+  filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: 0 1px 0 #e8ecf1;
+}
+
+html.ios-standalone .epc-toolbar .search-group input {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  opacity: 1 !important;
+  border: 1px solid #94a3b8 !important;
+}
+
+html.ios-standalone body {
+  padding-bottom: 0 !important;
+}
+
+html.ios-standalone .sidebar {
+  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  box-sizing: border-box !important;
+  background: #ffffff !important;
+}
+
+/* 收合：高度 = 48px tab + 底部安全區，貼齊螢幕底 */
+html.ios-standalone .layout.panel-collapsed .sidebar-body {
+  display: none !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  flex: 0 0 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+html.ios-standalone .layout.panel-collapsed .sidebar {
+  flex: 0 0 auto !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: #ffffff !important;
+}
+
+html.ios-standalone .layout.panel-collapsed .sidebar-tabs {
+  height: 48px !important;
+  min-height: 48px !important;
+  max-height: 48px !important;
+  padding-top: 0 !important;
+  padding-left: 4px !important;
+  padding-right: 4px !important;
+  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  box-sizing: content-box !important;
+  margin: 0 !important;
+  background: #ffffff !important;
+  border-top: 1px solid #e2e8f0 !important;
+}
+
+html.ios-standalone .layout.panel-collapsed .left-pane {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+}
+
+@media (display-mode: standalone) {
+  .pwa-safe-top {
+    display: block !important;
+    flex-shrink: 0 !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    height: max(47px, env(safe-area-inset-top, 47px)) !important;
+    min-height: max(47px, env(safe-area-inset-top, 47px)) !important;
+  }
+  .epc-toolbar {
+    background: #ffffff !important;
+    opacity: 1 !important;
+  }
+  .layout.panel-collapsed .sidebar-body {
+    display: none !important;
+    height: 0 !important;
+  }
+  .layout.panel-collapsed .sidebar-tabs {
+    height: 48px !important;
+    min-height: 48px !important;
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    box-sizing: content-box !important;
+    background: #fff !important;
   }
 }
