@@ -21,12 +21,10 @@ html, body {
   height: 100dvh;
   margin: 0;
   overflow: hidden;
-  /* iPhone PWA：避開瀏海與底部橫條 */
-  padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
-  background: #1a5276; /* 狀態列後方底色，避免透明露黑 */
+  padding: 0;
   box-sizing: border-box;
+  background: #fff;
 }
-html { background: #1a5276; }
 body {
   background: var(--bg);
   color: var(--text);
@@ -35,6 +33,10 @@ body {
   line-height: 1.5;
   display: flex;
   flex-direction: column;
+  /* 僅左右／底避開安全區，頂部由工具列自己填色 */
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 header { padding: 10px 20px; background: var(--epc-blue); color:#fff; z-index: 10; flex: none; display:flex; align-items:center; justify-content:space-between; }
@@ -703,27 +705,23 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
 
 
 /* ===== PWA / iPhone 安全區 ===== */
+/* 工具列：不透明背景 + 頂部安全區內距，避免狀態列下方「透明」 */
 .epc-toolbar {
-  padding-top: max(4px, env(safe-area-inset-top, 0px));
+  background: #fff !important;
+  padding-top: max(4px, env(safe-area-inset-top, 0px)) !important;
+  position: relative;
+  z-index: 50;
+  flex-shrink: 0;
 }
-.sidebar {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-}
-.sidebar-tabs {
-  padding-bottom: max(0px, env(safe-area-inset-bottom, 0px));
-}
-/* 底部按鈕不被圓角／Home 指示條裁切 */
-@media (max-width: 1024px) and (orientation: portrait) {
-  .layout .sidebar {
+/* 底部側欄避開 Home 橫條 */
+@media (max-width: 1024px) {
+  .sidebar {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
   .layout.panel-collapsed .sidebar {
     height: calc(48px + env(safe-area-inset-bottom, 0px)) !important;
     max-height: calc(48px + env(safe-area-inset-bottom, 0px)) !important;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+    box-sizing: border-box !important;
   }
-}
-#calcIframeContainer {
-  padding-top: env(safe-area-inset-top, 0px);
-  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
