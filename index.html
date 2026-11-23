@@ -1,13 +1,51 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
+
+<style id="ios-pwa-critical">
+/* 預設先按有瀏海預留，避免首屏閃一下再跳 */
+html.ios-standalone body { background: #fff !important; }
+html.ios-standalone .epc-toolbar {
+  padding-top: 47px !important;
+  background: #fff !important;
+  opacity: 1 !important;
+  box-sizing: border-box !important;
+}
+html.ios-standalone #pwaSafeTop { display: none !important; height: 0 !important; }
+html.ios-standalone .layout.panel-collapsed .sidebar-body { display: none !important; height: 0 !important; }
+html.ios-standalone .layout.panel-collapsed .sidebar-tabs {
+  height: 48px !important;
+  padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+  box-sizing: content-box !important;
+  background: #fff !important;
+}
+</style>
+<script>
+(function () {
+  var st = false;
+  try {
+    st = window.navigator.standalone === true ||
+      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  } catch (e) {}
+  if (st) {
+    document.documentElement.classList.add('ios-standalone');
+    // 同步寫入 style，不等 DOMContentLoaded
+    var s = document.createElement('style');
+    s.id = 'ios-pwa-inline';
+    s.textContent = 'html.ios-standalone .epc-toolbar{padding-top:47px!important;background:#fff!important;opacity:1!important;box-sizing:border-box!important;}html.ios-standalone #pwaSafeTop{display:none!important;height:0!important;}';
+    document.documentElement.appendChild(s);
+  }
+  window.__IOS_STANDALONE__ = st;
+})();
+</script>
+
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>零件圖 PDF → EPC 模式 (EPC_V30_57 pos-fix)</title>
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-<link rel="stylesheet" href="style.css?v=20261123pwa3">
+<link rel="stylesheet" href="style.css?v=20261123pwa4">
 
 <!-- 下面都是在入手機安裝檔使用的 -->
 <link rel="manifest" href="manifest.json">
@@ -186,7 +224,7 @@
 <script src="parsers/honda-id.js"></script>
 <script src="parsers/kawasaki-id.js"></script>
 <script src="parsers/kawasaki-th.js"></script>
-<script src="app.js?v=20261123pwa3"></script>
+<script src="app.js?v=20261123pwa4"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </body>
 </html>
