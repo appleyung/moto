@@ -229,11 +229,11 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
 
     .epc-toolbar {
       display: grid !important;
-      grid-template-columns: 1fr 2.5fr 1fr 2.5fr 1fr 1fr 1fr !important;
+      grid-template-columns: 1fr 1.8fr 1fr 1.6fr 1fr 1fr 1fr 1fr !important;
       grid-template-rows: auto auto !important;
       grid-template-areas: 
-        "search search search search search search search"
-        "toup ram zoomminus zoomtext zoomplus brand upload" !important;
+        "search search search search search search search search"
+        "toup ram zoomminus zoomtext zoomplus lang brand upload" !important;
       height: auto !important; flex: 0 0 auto !important; padding: 6px !important; gap: 4px !important; align-content: start !important;
     }
     .epc-toolbar .toolbar-left, .epc-toolbar .toolbar-right { display: contents !important; }
@@ -256,14 +256,18 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
     .epc-toolbar .pdf-controls { display: contents !important; }
     .epc-toolbar .pdf-controls button:first-child { grid-area: zoomminus !important; font-size: 14px !important; }
     .epc-toolbar .pdf-controls button:last-child { grid-area: zoomplus !important; font-size: 14px !important; }
+    .epc-toolbar .lang-dropdown { grid-area: lang !important; display: flex !important; width: 100% !important; height: 28px !important; position: relative !important; }
+    .epc-toolbar .lang-dropdown > button { width: 100% !important; height: 100% !important; border-radius: 4px !important; }
     .epc-toolbar .pdf-controls .zoom-input-group { grid-area: zoomtext !important; background: #fff !important; }
     .epc-toolbar .pdf-controls input { width: 100% !important; max-width: 32px !important; border: none !important; background: transparent !important; font-size: 12px !important; text-align: left !important; padding: 0 !important; }
     .epc-toolbar .pdf-controls span { font-size: 12px !important; margin-right: 2px !important; margin-left: 0 !important; }
 
-    .epc-toolbar .brand-dropdown, .epc-toolbar .upload-dropdown { display: flex !important; width: 100% !important; height: 28px !important; position: relative !important; }
+    .epc-toolbar .lang-dropdown, .epc-toolbar .brand-dropdown, .epc-toolbar .upload-dropdown { display: flex !important; width: 100% !important; height: 28px !important; position: relative !important; }
+    .epc-toolbar .lang-dropdown { grid-area: lang !important; }
+    .epc-toolbar .lang-dropdown > button { width: 100% !important; height: 100% !important; border-radius: 4px !important; }
     .epc-toolbar .brand-dropdown { grid-area: brand !important; }
     .epc-toolbar .upload-dropdown { grid-area: upload !important; }
-    .epc-toolbar .brand-dropdown > button, .epc-toolbar .upload-dropdown > button { width: 100% !important; height: 100% !important;  border-radius: 4px !important; }
+    .epc-toolbar .brand-dropdown > button, .epc-toolbar .upload-dropdown > button, .epc-toolbar .lang-dropdown > button { width: 100% !important; height: 100% !important;  border-radius: 4px !important; }
     .epc-toolbar .brand-dropdown #brandMenu { left: 0; right: auto; }
     .epc-toolbar .upload-dropdown #uploadMenu { left: auto; right: 0; }
 
@@ -282,9 +286,9 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
 
     .epc-toolbar {
       display: grid !important;
-      grid-template-columns: minmax(80px, 1fr) 46px 65px 110px 34px 34px !important;
+      grid-template-columns: minmax(60px, 1fr) 40px 56px 100px 32px 32px 32px !important;
       grid-template-rows: 1fr !important;
-      grid-template-areas: "search toup ram zoomcontrols brand upload" !important;
+      grid-template-areas: "search toup ram zoomcontrols lang brand upload" !important;
       height: 44px !important; 
       flex: 0 0 44px !important; 
       padding: 4px 6px !important; 
@@ -365,12 +369,14 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
       margin: 0 0 0 2px !important;
     }
 
-    .epc-toolbar .brand-dropdown, .epc-toolbar .upload-dropdown { 
+    .epc-toolbar .lang-dropdown, .epc-toolbar .brand-dropdown, .epc-toolbar .upload-dropdown { 
       display: flex !important; 
       width: 100% !important; 
       height: 30px !important; 
       position: relative !important; 
     }
+    .epc-toolbar .lang-dropdown { grid-area: lang !important; }
+    .epc-toolbar .lang-dropdown > button { width: 100% !important; height: 100% !important; border-radius: 4px !important; }
     .epc-toolbar .brand-dropdown { grid-area: brand !important; }
     .epc-toolbar .upload-dropdown { grid-area: upload !important; }
     .epc-toolbar .brand-dropdown > button, .epc-toolbar .upload-dropdown > button { 
@@ -410,8 +416,8 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
 @media screen and (min-width: 1024px) {
   .epc-toolbar {
     display: grid !important;
-    grid-template-columns: minmax(120px, 1fr) 40px 70px 120px 40px 40px;
-    grid-template-areas: "search toup ram zoomcontrols brand upload";
+    grid-template-columns: minmax(120px, 1fr) 40px 70px 120px 40px 40px 40px;
+    grid-template-areas: "search toup ram zoomcontrols lang brand upload";
     align-items: center;
     gap: 6px;
     padding: 4px 8px;
@@ -594,4 +600,88 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
     padding: 2px !important;
     writing-mode: horizontal-tb !important;
   }
+}
+
+
+/* ---- 工具列統一按鈕規格 ---- */
+.epc-toolbar .toolbar-btn {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #c5d4e8;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-sizing: border-box;
+  flex: none;
+}
+.epc-toolbar .toolbar-btn:hover { background: #e2e8f0; }
+.epc-toolbar .toolbar-btn:active { background: #cbd5e1; }
+
+.epc-toolbar .pdf-controls > button {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border: 1px solid #c5d4e8;
+  border-radius: 6px;
+  background: #f1f5f9;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.lang-dropdown, .brand-dropdown, .upload-dropdown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+.toolbar-dropdown-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 44px;
+  background: #fff;
+  border: 1px solid #b0c4d8;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  z-index: 9999;
+  overflow: hidden;
+}
+.toolbar-dropdown-menu.open { display: block; }
+.brand-btn, .lang-btn {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  border-top: 1px solid #eef2f7;
+  background: #fff;
+  cursor: pointer;
+  font-weight: 700;
+  text-align: center;
+}
+.brand-btn:first-child, .lang-btn:first-child { border-top: none; }
+.brand-btn[data-brand="yamaha"], .toolbar-btn.brand-yamaha { color: #2563eb; }
+.brand-btn[data-brand="honda"], .toolbar-btn.brand-honda { color: #dc2626; }
+.brand-btn[data-brand="kawasaki"], .toolbar-btn.brand-kawasaki { color: #16a34a; }
+
+@media (max-width: 1024px) {
+  .epc-toolbar .lang-dropdown { grid-area: lang !important; width: 100% !important; height: 28px !important; }
+  .epc-toolbar .lang-dropdown > button { width: 100% !important; height: 100% !important; border-radius: 4px !important; }
+}
+
+
+/* 最小縮放／內容不超出寬度時：禁止左右撥動 */
+.pdf-viewport.pdf-no-x-scroll {
+  overflow-x: hidden !important;
 }
