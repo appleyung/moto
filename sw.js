@@ -1,4 +1,4 @@
-const CACHE = 'mot-cache-v20261123pwa3';
+const CACHE = 'mot-cache-v20261123pwa4';
 const ASSETS = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
