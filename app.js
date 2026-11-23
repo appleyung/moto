@@ -2394,13 +2394,71 @@ $('btnExcel').addEventListener('click', () => {
     }
   }
 
+  function applyCollapseLayout() {
+    const collapsed = layout.classList.contains('panel-collapsed');
+    const sidebar = layout.querySelector('.sidebar');
+    const body = layout.querySelector('.sidebar-body');
+    const tabs = layout.querySelector('.sidebar-tabs');
+    if (!sidebar) return;
+    if (collapsed) {
+      // 強制只留 tab 列，避開 CSS 優先權問題（iOS standalone）
+      if (body) {
+        body.style.display = 'none';
+        body.style.height = '0';
+        body.style.overflow = 'hidden';
+        body.style.flex = '0 0 0px';
+      }
+      sidebar.style.flex = '0 0 auto';
+      sidebar.style.height = 'auto';
+      sidebar.style.maxHeight = 'none';
+      sidebar.style.minHeight = '0';
+      sidebar.style.overflow = 'hidden';
+      if (tabs) {
+        const safeBottom = (window.CSS && CSS.supports('padding-bottom: env(safe-area-inset-bottom)'))
+          ? 'env(safe-area-inset-bottom, 0px)' : '0px';
+        tabs.style.height = '48px';
+        tabs.style.minHeight = '48px';
+        tabs.style.maxHeight = '48px';
+        tabs.style.paddingBottom = safeBottom;
+        tabs.style.boxSizing = 'content-box';
+      }
+    } else {
+      if (body) {
+        body.style.display = '';
+        body.style.height = '';
+        body.style.overflow = '';
+        body.style.flex = '';
+      }
+      sidebar.style.flex = '';
+      sidebar.style.height = '';
+      sidebar.style.maxHeight = '';
+      sidebar.style.minHeight = '';
+      sidebar.style.overflow = '';
+      if (tabs) {
+        tabs.style.height = '';
+        tabs.style.minHeight = '';
+        tabs.style.maxHeight = '';
+        tabs.style.paddingBottom = '';
+        tabs.style.boxSizing = '';
+      }
+    }
+    try {
+      if (typeof updateHorizontalScrollLock === 'function') updateHorizontalScrollLock();
+    } catch (err) {}
+  }
+
   btn.addEventListener('click', e => {
     e.stopPropagation();
     layout.classList.toggle('panel-collapsed');
     syncIcon();
+    applyCollapseLayout();
   });
-  window.addEventListener('resize', syncIcon);
+  window.addEventListener('resize', function () {
+    syncIcon();
+    applyCollapseLayout();
+  });
   syncIcon();
+  applyCollapseLayout();
 })();
 
 /* ================= 初始化 ================= */
