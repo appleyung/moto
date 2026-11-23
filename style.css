@@ -46,11 +46,14 @@ body {
 /* 頂部安全區實心條（Dynamic Island / 狀態列下方不透明） */
 .pwa-safe-top {
   flex: 0 0 auto;
+  height: constant(safe-area-inset-top, 0px);
   height: env(safe-area-inset-top, 0px);
+  min-height: constant(safe-area-inset-top, 0px);
   min-height: env(safe-area-inset-top, 0px);
-  background: #ffffff;
+  background: #ffffff !important;
   width: 100%;
-  z-index: 100;
+  z-index: 200;
+  flex-shrink: 0;
 }
 
 header { padding: 10px 20px; background: var(--epc-blue); color:#fff; z-index: 10; flex: none; display:flex; align-items:center; justify-content:space-between; }
@@ -1015,4 +1018,113 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
 html, body, .layout, .left-pane, .sidebar, .epc-toolbar,
 .sidebar-tabs, .sidebar-body, .part-list, .picklist-list {
   touch-action: manipulation;
+}
+
+
+/* ========== iPhone 主畫面 App（standalone）專用 ========== */
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  html {
+    height: 100%;
+    height: -webkit-fill-available;
+    background: #ffffff;
+  }
+  body {
+    /* 填滿可視區，避免 100vh 算進瀏海外高度導致底部被切 */
+    min-height: 100%;
+    min-height: 100dvh;
+    min-height: -webkit-fill-available;
+    height: 100%;
+    height: -webkit-fill-available;
+    max-height: -webkit-fill-available;
+    margin: 0;
+    padding-left: constant(safe-area-inset-left, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: constant(safe-area-inset-right, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: #ffffff;
+  }
+  .pwa-safe-top {
+    display: block !important;
+    background: #ffffff !important;
+    height: constant(safe-area-inset-top, 0px);
+    height: env(safe-area-inset-top, 0px);
+    min-height: constant(safe-area-inset-top, 0px);
+    min-height: env(safe-area-inset-top, 0px);
+  }
+  .epc-toolbar {
+    background: #ffffff !important;
+    opacity: 1 !important;
+    filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    flex-shrink: 0 !important;
+    position: relative;
+    z-index: 50;
+  }
+  .epc-toolbar input,
+  .epc-toolbar button {
+    opacity: 1 !important;
+    background-color: #f1f5f9;
+  }
+  .epc-toolbar .search-group input {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    opacity: 1 !important;
+  }
+  .layout {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+
+  /* 直屏：側欄高度內含底部安全區，避免被 Home 條切開 */
+  @media (orientation: portrait) {
+    .layout .sidebar {
+      flex: 0 0 auto !important;
+      height: calc(40dvh + constant(safe-area-inset-bottom, 0px)) !important;
+      height: calc(40dvh + env(safe-area-inset-bottom, 0px)) !important;
+      max-height: calc(40dvh + env(safe-area-inset-bottom, 0px)) !important;
+      min-height: calc(40dvh + env(safe-area-inset-bottom, 0px)) !important;
+      padding-bottom: constant(safe-area-inset-bottom, 0px) !important;
+      padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+      box-sizing: border-box !important;
+      overflow: hidden !important;
+    }
+    .layout .sidebar-tabs {
+      padding-bottom: 0 !important;
+    }
+    .layout.panel-collapsed .sidebar {
+      height: auto !important;
+      min-height: 0 !important;
+      max-height: none !important;
+      flex: 0 0 auto !important;
+    }
+    .layout.panel-collapsed .sidebar-tabs {
+      height: 48px !important;
+      min-height: 48px !important;
+      padding-bottom: constant(safe-area-inset-bottom, 0px) !important;
+      padding-bottom: env(safe-area-inset-bottom, 0px) !important;
+      box-sizing: content-box !important;
+    }
+  }
+}
+
+/* iOS Safari 有時不認 display-mode，用 navigator standalone 由 class 補 */
+html.ios-standalone body {
+  min-height: -webkit-fill-available;
+  height: -webkit-fill-available;
+}
+html.ios-standalone .pwa-safe-top {
+  display: block !important;
+  background: #fff !important;
+  height: env(safe-area-inset-top, 0px);
+}
+html.ios-standalone .epc-toolbar {
+  background: #fff !important;
+  opacity: 1 !important;
 }
