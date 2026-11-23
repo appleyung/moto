@@ -1,15 +1,3 @@
-
-
-
-
-/* iOS 主畫面 App 模式標記（Safari 有時不支援 display-mode） */
-(function () {
-  try {
-    var standalone = (window.navigator.standalone === true) ||
-      (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-    if (standalone) document.documentElement.classList.add('ios-standalone');
-  } catch (e) {}
-})();
 /* ============================================================
  * EPC Viewer — app.js (v33)
  * 職責：UI、渲染、虛擬化、縮放、滾動、PickList、匯出、檔案處理
@@ -2633,7 +2621,7 @@ window.addEventListener('resize', function () {
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=20261123pwa4')
+    navigator.serviceWorker.register('sw.js?v=20261123stable1')
       .then(function (reg) {
         console.log('SW 註冊成功');
         try { reg.update(); } catch (e) {}
@@ -2643,7 +2631,7 @@ if ('serviceWorker' in navigator) {
     if (window.caches && caches.keys) {
       caches.keys().then(function (keys) {
         keys.forEach(function (k) {
-          if (k !== 'mot-cache-v20261123pwa4') caches.delete(k);
+          if (k !== 'mot-cache-v20261123stable1') caches.delete(k);
         });
       });
     }
@@ -2654,168 +2642,7 @@ if ('serviceWorker' in navigator) {
 /* ========================================== */
 /* iOS PWA 安全區強制修正 (Post-Load Fix) */
 /* ========================================== */
-(function forceIOSSafeAreaFix() {
-  function measureInset(side) {
-    try {
-      var el = document.createElement('div');
-      el.style.cssText = 'position:fixed;visibility:hidden;pointer-events:none;padding-' + side + ':env(safe-area-inset-' + side + ',0px);';
-      document.body.appendChild(el);
-      var val = parseFloat(getComputedStyle(el)['padding' + side.charAt(0).toUpperCase() + side.slice(1)]) || 0;
-      el.remove();
-      return val;
-    } catch (e) {
-      return 0;
-    }
-  }
 
-  function apply() {
-    var standalone = false;
-    try {
-      standalone = window.navigator.standalone === true ||
-        (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-    } catch (e) {}
-    if (standalone) {
-      document.documentElement.classList.add('ios-standalone');
-      document.body.classList.add('ios-standalone');
-    }
-
-    // 僅在 standalone 強制頂部白底高度
-    if (standalone) {
-      var topInset = measureInset('top');
-      var forcedTop = Math.max(topInset || 0, 47);
-      var safeTopEl = document.getElementById('pwaSafeTop');
-      if (safeTopEl) {
-        safeTopEl.style.setProperty('height', forcedTop + 'px', 'important');
-        safeTopEl.style.setProperty('min-height', forcedTop + 'px', 'important');
-        safeTopEl.style.setProperty('background', '#ffffff', 'important');
-        safeTopEl.style.setProperty('display', 'block', 'important');
-        safeTopEl.style.setProperty('flex-shrink', '0', 'important');
-      }
-      var bar = document.querySelector('.epc-toolbar');
-      if (bar) {
-        bar.style.setProperty('background', '#ffffff', 'important');
-        bar.style.setProperty('opacity', '1', 'important');
-      }
-    }
-
-    // 收合側欄貼底
-    var layout = document.querySelector('.layout');
-    var collapsed = layout && layout.classList.contains('panel-collapsed');
-    var tabs = document.querySelector('.sidebar-tabs');
-    var body = document.querySelector('.sidebar-body');
-    var sidebar = document.querySelector('.sidebar');
-    if (collapsed) {
-      var bottomInset = measureInset('bottom');
-      if (body) {
-        body.style.display = 'none';
-        body.style.height = '0';
-        body.style.flex = '0 0 0px';
-      }
-      if (tabs) {
-        tabs.style.height = '48px';
-        tabs.style.minHeight = '48px';
-        tabs.style.maxHeight = '48px';
-        tabs.style.paddingBottom = bottomInset + 'px';
-        tabs.style.boxSizing = 'content-box';
-        tabs.style.background = '#ffffff';
-      }
-      if (sidebar) {
-        sidebar.style.height = 'auto';
-        sidebar.style.flex = '0 0 auto';
-        sidebar.style.minHeight = '0';
-        sidebar.style.maxHeight = 'none';
-        sidebar.style.paddingBottom = '0';
-        sidebar.style.overflow = 'hidden';
-      }
-    }
-    try { console.log('[iOS Fix] standalone=', standalone, 'top=', measureInset('top'), 'bottom=', measureInset('bottom')); } catch (e) {}
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () { setTimeout(apply, 50); });
-  } else {
-    setTimeout(apply, 50);
-  }
-  window.addEventListener('resize', function () { setTimeout(apply, 50); });
-  window.addEventListener('orientationchange', function () { setTimeout(apply, 150); });
-
-  // 收合按鈕後再跑一次
-  document.addEventListener('click', function (e) {
-    if (e.target && e.target.closest && e.target.closest('#btnSidebarCollapse')) {
-      setTimeout(apply, 30);
-    }
-  }, true);
-})();
 
 
 /* ========================================== */
-/* iOS PWA 安全區強制修正 PWA3 */
-/* ========================================== */
-(function forceIOSSafeAreaFix() {
-  function isStandalone() {
-    try {
-      return window.navigator.standalone === true ||
-        (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-    } catch (e) { return false; }
-  }
-  function measure(side) {
-    try {
-      var el = document.createElement('div');
-      el.style.cssText = 'position:fixed;left:0;top:0;visibility:hidden;padding-' + side + ':env(safe-area-inset-' + side + ',0px);';
-      document.body.appendChild(el);
-      var key = 'padding' + side.charAt(0).toUpperCase() + side.slice(1);
-      var v = parseFloat(getComputedStyle(el)[key]) || 0;
-      el.remove();
-      return v;
-    } catch (e) { return 0; }
-  }
-  function apply() {
-    var st = isStandalone();
-    if (st) {
-      document.documentElement.classList.add('ios-standalone');
-      document.body.classList.add('ios-standalone');
-    }
-    var bar = document.querySelector('.epc-toolbar');
-    if (st && bar) {
-      var top = Math.max(measure('top'), 47);
-      bar.style.setProperty('padding-top', top + 'px', 'important');
-      bar.style.setProperty('background', '#ffffff', 'important');
-      bar.style.setProperty('opacity', '1', 'important');
-      bar.style.setProperty('box-sizing', 'border-box', 'important');
-    }
-    var safeTop = document.getElementById('pwaSafeTop');
-    if (st && safeTop) {
-      // 改由 toolbar padding 處理，避免雙倍空白
-      safeTop.style.setProperty('display', 'none', 'important');
-      safeTop.style.setProperty('height', '0', 'important');
-    }
-    var layout = document.querySelector('.layout');
-    if (layout && layout.classList.contains('panel-collapsed')) {
-      var bottom = measure('bottom');
-      var body = document.querySelector('.sidebar-body');
-      var tabs = document.querySelector('.sidebar-tabs');
-      var sidebar = document.querySelector('.sidebar');
-      if (body) { body.style.display = 'none'; body.style.height = '0'; }
-      if (tabs) {
-        tabs.style.setProperty('height', '48px', 'important');
-        tabs.style.setProperty('padding-bottom', bottom + 'px', 'important');
-        tabs.style.setProperty('box-sizing', 'content-box', 'important');
-        tabs.style.setProperty('background', '#ffffff', 'important');
-      }
-      if (sidebar) {
-        sidebar.style.setProperty('height', 'auto', 'important');
-        sidebar.style.setProperty('flex', '0 0 auto', 'important');
-        sidebar.style.setProperty('overflow', 'hidden', 'important');
-      }
-    }
-    try { console.log('[iOS Fix PWA3] standalone=', st, 'top=', measure('top'), 'bottom=', measure('bottom')); } catch (e) {}
-  }
-  function run() { setTimeout(apply, 30); setTimeout(apply, 300); }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
-  else run();
-  window.addEventListener('resize', run);
-  window.addEventListener('orientationchange', function () { setTimeout(apply, 200); });
-  document.addEventListener('click', function (e) {
-    if (e.target && e.target.closest && e.target.closest('#btnSidebarCollapse')) setTimeout(apply, 40);
-  }, true);
-})();
