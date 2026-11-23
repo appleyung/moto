@@ -52,13 +52,24 @@
       <button id="btnZoomIn" title="放大">+</button>
     </div>
 
-    <!-- 識別版本按鈕：Y/H/K -->
+        <!-- 零件語言：中 / 英 / 印 / 泰 -->
+    <div class="lang-dropdown">
+      <button type="button" id="btnLangSelect" class="toolbar-btn" title="選擇零件語言">中</button>
+      <div id="langMenu" class="toolbar-dropdown-menu">
+        <button type="button" class="lang-btn" data-lang="zh">中</button>
+        <button type="button" class="lang-btn" data-lang="en">英</button>
+        <button type="button" class="lang-btn" data-lang="id">印</button>
+        <button type="button" class="lang-btn" data-lang="th">泰</button>
+      </div>
+    </div>
+
+    <!-- 品牌：Y / H / K -->
     <div class="brand-dropdown">
-<button type="button" id="btnBrandSelect" class="toolbar-btn" title="選擇品牌" style="font-weight:bold;">Y</button>
-      <div id="brandMenu" class="toolbar-dropdown-menu" style="display:none;">
-        <button type="button" class="brand-btn" data-brand="yamaha" title="Yamaha" style="display:block;padding:6px 12px;border:none;background:none;cursor:pointer;font-weight:bold;color:#2563eb;width:100%;text-align:left;">Y</button>
-        <button type="button" class="brand-btn" data-brand="honda" title="Honda" style="display:block;padding:6px 12px;border:none;background:none;cursor:pointer;font-weight:bold;color:#dc2626;border-top:1px solid #eee;width:100%;text-align:left;">H</button>
-        <button type="button" class="brand-btn" data-brand="kawasaki" title="Kawasaki" style="display:block;padding:6px 12px;border:none;background:none;cursor:pointer;font-weight:bold;color:#16a34a;border-top:1px solid #eee;width:100%;text-align:left;">K</button>
+      <button type="button" id="btnBrandSelect" class="toolbar-btn brand-yamaha" title="選擇品牌">Y</button>
+      <div id="brandMenu" class="toolbar-dropdown-menu">
+        <button type="button" class="brand-btn" data-brand="yamaha">Y</button>
+        <button type="button" class="brand-btn" data-brand="honda">H</button>
+        <button type="button" class="brand-btn" data-brand="kawasaki">K</button>
       </div>
     </div>
   </div>
@@ -167,10 +178,13 @@
 <script src="i18n/transfer-id.js"></script>
 <script src="i18n/transfer-th.js"></script>
 <script src="parsers/yamaha.js"></script>
+<script src="parsers/yamaha-en.js"></script>
+<script src="parsers/yamaha-id.js"></script>
+<script src="parsers/yamaha-th.js"></script>
 <script src="parsers/honda-jp.js"></script>
 <script src="parsers/honda-id.js"></script>
 <script src="parsers/kawasaki-id.js"></script>
-<script src="parsers/kawasaki-th.js?v=23"></script>
+<script src="parsers/kawasaki-th.js"></script>
 <script src="app.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </body>
