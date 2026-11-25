@@ -67,22 +67,42 @@ function partKeysEqual(a, b) {
  */
 var selectedLocale = 'zh';
 
-function getBrand(mode) {
-  var B = window.EPC_BRAND || {};
-  var key = mode || currentMode || 'yamaha';
+function resolveBrandKey(mode) {
+  var key = mode || currentMode || selectedBrand || 'yamaha';
   key = String(key);
   if (key === 'honda' || key.indexOf('honda') === 0) {
-    key = (selectedLocale === 'id') ? 'honda-id' : 'honda-jp';
-  } else if (key === 'kawasaki' || key.indexOf('kawasaki') === 0) {
-    key = (selectedLocale === 'id') ? 'kawasaki-id' : 'kawasaki-th';
-  } else {
-    // yamaha
-    if (selectedLocale === 'en') key = 'yamaha-en';
-    else if (selectedLocale === 'id') key = 'yamaha-id';
-    else if (selectedLocale === 'th') key = 'yamaha-th';
-    else key = 'yamaha';
+    return (typeof selectedLocale !== 'undefined' && selectedLocale === 'id') ? 'honda-id' : 'honda-jp';
   }
-  return B[key] || B['yamaha'] || B['honda-jp'] || B['kawasaki-th'] || null;
+  if (key === 'kawasaki' || key.indexOf('kawasaki') === 0) {
+    return (typeof selectedLocale !== 'undefined' && selectedLocale === 'id') ? 'kawasaki-id' : 'kawasaki-th';
+  }
+  // yamaha family
+  if (typeof selectedLocale !== 'undefined') {
+    if (selectedLocale === 'en') return 'yamaha-en';
+    if (selectedLocale === 'id') return 'yamaha-id';
+    if (selectedLocale === 'th') return 'yamaha-th';
+  }
+  return 'yamaha';
+}
+
+function getBrand(mode) {
+  var B = window.EPC_BRAND || {};
+  var key = resolveBrandKey(mode);
+  // 只回傳對應品牌；缺少 parser 時不要退回 yamaha，避免 UI 顯示錯誤
+  if (B[key]) return B[key];
+  // 同系列後備（例如 yamaha-en 缺則 yamaha）
+  if (key.indexOf('yamaha') === 0 && B['yamaha']) return B['yamaha'];
+  if (key.indexOf('honda') === 0 && (B['honda-jp'] || B['honda-id'])) return B['honda-jp'] || B['honda-id'];
+  if (key.indexOf('kawasaki') === 0 && (B['kawasaki-th'] || B['kawasaki-id'])) return B['kawasaki-th'] || B['kawasaki-id'];
+  // 仍沒有：回傳僅含 id 的 stub，供 UI 顯示正確品牌名
+  return { id: key, parseItems: null };
+}
+
+function getBrandLabel(mode) {
+  var key = resolveBrandKey(mode);
+  if (key.indexOf('honda') === 0) return key;
+  if (key.indexOf('kawasaki') === 0) return key;
+  return key; // yamaha / yamaha-en …
 }
 
 /* 若 parsers 未載入，嘗試補載 yamaha.js */
@@ -1020,6 +1040,12 @@ document.addEventListener('DOMContentLoaded', () => {
         btnBrand.textContent = newBrand === 'yamaha' ? 'Y' : (newBrand === 'honda' ? 'H' : 'K');
         btnBrand.classList.remove('brand-yamaha', 'brand-honda', 'brand-kawasaki');
         btnBrand.classList.add('brand-' + newBrand);
+        // 無 PDF 也要更新清單上的品牌顯示
+        try {
+          if (typeof renderPartList === 'function') {
+            renderPartList(currentSelectValue === 'all' ? 'all' : 'page', currentPageIndex || 0, false);
+          }
+        } catch (e) {}
         if (!currentPdfDoc) return;
         if (newBrand === oldBrand) return;
         await switchBrandAndReparseAll(newBrand);
@@ -1965,7 +1991,9 @@ function renderPartList(mode = 'page', pageIdx = 0, scrollToTop = false) {
 
   if (!renderItems.length) {
     const totalAll = partInfoMap ? partInfoMap.size : 0;
-    const brandId = ((typeof getBrand === 'function' && getBrand(currentMode)) || {}).id || '?';
+    const brandId = (typeof getBrandLabel === 'function')
+      ? getBrandLabel(currentMode)
+      : ((typeof getBrand === 'function' && getBrand(currentMode)) || {}).id || selectedBrand || currentMode || '?';
     box.innerHTML = `<p style="color:var(--muted);font-size:13px;text-align:center;padding:30px 14px;">無零件資料。<br><span style="font-size:11px;opacity:.8">總共 ${totalAll} 筆 · 本頁 ${pageIdx} · ${brandId}</span></p>`;
     if (scrollToTop) box.scrollTop = 0;
     return;
