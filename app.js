@@ -2680,7 +2680,7 @@ window.addEventListener('resize', function () {
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js?v=20261123stable1')
+    navigator.serviceWorker.register('sw.js?v=20261125offline1', { scope: './' })
       .then(function (reg) {
         console.log('SW 註冊成功');
         try { reg.update(); } catch (e) {}
