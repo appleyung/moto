@@ -8,11 +8,21 @@
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   
   html, body {
+    /* 預設 100%：在 index 的 iframe 內對齊容器，不會撐出 PDF 區 */
     height: 100%;
+    max-height: 100%;
     width: 100%;
     margin: 0;
     padding: 0;
     overflow: hidden;
+  }
+
+  /* 僅獨立開啟 calc.html（非 iframe）時用 dvh 填滿螢幕 */
+  html.top-level, html.top-level body {
+    height: 100%;
+    height: 100dvh;
+    height: -webkit-fill-available;
+    max-height: 100dvh;
   }
 
   body {
@@ -23,7 +33,8 @@
     justify-content: stretch;
     align-items: stretch;
     width: 100%;
-    min-height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .wrap {
@@ -31,27 +42,30 @@
     max-width: none !important;
     flex: 1 1 auto;
     height: 100%;
-    min-height: 100%;
+    max-height: 100%;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     padding: 6px;
     padding-left: max(6px, env(safe-area-inset-left, 0px));
     padding-right: max(6px, env(safe-area-inset-right, 0px));
-    padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
+    padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
     gap: 6px;
     box-sizing: border-box;
+    overflow: hidden;
   }
 
   .split-card {
-    flex: 1;
+    flex: 1 1 0;
     min-height: 0;
+    max-height: 100%;
     display: flex;
     flex-direction: column;
     background: #fff;
     border: 1px solid #e2e8f0;
     border-radius: 10px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    padding: 10px;
+    padding: 8px 10px;
     overflow: hidden;
   }
 
@@ -160,18 +174,38 @@
   .empty td { text-align: center; color: #94a3b8; padding: 40px 0; }
 
   .total-card {
+    flex: 0 0 auto;
     flex-shrink: 0;
     background: #0f766e;
     color: #fff;
-    padding: 14px 20px;
+    padding: 10px 16px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     border-radius: 10px;
     box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    margin: 0;
   }
-  .total-card .label { font-size: 15px; font-weight: 500; opacity: 0.95; }
-  .total-card .total { font-size: 26px; font-weight: 700; font-family: ui-monospace, monospace; letter-spacing: 1px; }
+  .total-card .label { font-size: 14px; font-weight: 500; opacity: 0.95; }
+  .total-card .total { font-size: 22px; font-weight: 700; font-family: ui-monospace, monospace; letter-spacing: 1px; }
+
+  .table-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 直屏小高度：輸入區略小，確保總價列完整可見 */
+  @media (orientation: portrait) and (max-height: 800px) {
+    .split-card { padding: 6px 8px; }
+    .head-row { margin-bottom: 4px; }
+    .head-row h2 { font-size: 14px; }
+    textarea { min-height: 48px; font-size: 12px; padding: 8px; }
+    .total-card { padding: 8px 14px; }
+    .total-card .total { font-size: 20px; }
+    .empty td { padding: 20px 0; }
+  }
 
   /* 橫屏：雙欄鋪滿整個 iframe */
   @media (orientation: landscape) {
@@ -304,6 +338,11 @@
     if (/總價值|零件號|總計|合計/.test(line)) return null;
 
     line = line.replace(/\t/g, ' ');
+    // 所有破折號／橫線統一成半形 -
+    // 含：- − – — ― ﹣ － ‐ ‑ ‒ ー －
+    line = line.replace(/[\u002D\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D\u30FC\uFF70]/g, '-');
+    // 多餘連續 - 壓成單一（保留零件號內單一 -）
+    // 不在此合併，避免誤傷；僅正規化字元
 
     const priceRe = /[¥￥$＄]+\s*([\d.,]+)/g;
     let m;
@@ -358,8 +397,10 @@
       }
     }
 
-    partNo = partNo.replace(/[\s\-–—_]+$/, '').trim();
-    partName = partName.replace(/^[\s\-–—_]+/, '').trim();
+    // 再保險：零件號內破折號統一為 -
+    partNo = partNo.replace(/[\u002D\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D\u30FC\uFF70]/g, '-');
+    partNo = partNo.replace(/[\s\-_]+$/, '').trim();
+    partName = partName.replace(/^[\s\-_]+/, '').trim();
 
     if (!partNo && !partName) return { error: true, raw: raw.trim() };
     return { partNo, partName, qty, price, raw: raw.trim() };
@@ -457,7 +498,8 @@
   copyBtn.addEventListener('click', async () => {
     if (!lastRows.length) return;
     
-    let txt = '零件號\t名稱\t數量\t總價\n';
+    // 複製不含表頭「零件號／名稱／數量／總價」
+    let txt = '';
     for (const r of lastRows) {
       txt += (r.partNo || '') + '\t' + (r.partName || '') + '\tx' + r.qty + '\t$' + fmt(r.price) + '\n';
     }
@@ -512,6 +554,18 @@
   });
 
   render();
+})();
+</script>
+
+<script>
+(function () {
+  try {
+    if (window.self === window.top) {
+      document.documentElement.classList.add('top-level');
+    }
+  } catch (e) {
+    /* cross-origin: treat as embedded */
+  }
 })();
 </script>
 </body>
