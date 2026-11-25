@@ -906,9 +906,11 @@ header h1{font-size:15px;margin:0;font-weight:600;letter-spacing:.5px;}
   text-align: center;
 }
 .brand-btn:first-child, .lang-btn:first-child { border-top: none; }
-.brand-btn[data-brand="yamaha"], .toolbar-btn.brand-yamaha { color: #2563eb; }
-.brand-btn[data-brand="honda"], .toolbar-btn.brand-honda { color: #dc2626; }
-.brand-btn[data-brand="kawasaki"], .toolbar-btn.brand-kawasaki { color: #16a34a; }
+.brand-btn[data-brand="yamaha"], .toolbar-btn.brand-yamaha,
+.brand-btn[data-brand="honda"], .toolbar-btn.brand-honda,
+.brand-btn[data-brand="kawasaki"], .toolbar-btn.brand-kawasaki {
+  color: var(--epc-blue) !important;
+}
 
 @media (max-width: 1024px) {
   .epc-toolbar .lang-dropdown { grid-area: lang !important; width: 100% !important; height: 28px !important; }
@@ -1013,6 +1015,40 @@ html, body, .layout, .left-pane, .sidebar, .epc-toolbar,
 
 /* iPhone 主畫面 App：整窗下移 5px */
 html.ios-standalone body {
-  padding-top: 30px !important;
+  padding-top: 5px !important;
   box-sizing: border-box !important;
+}
+
+
+/* toolbar-text-unified-blue：工具列文字統一藍色 */
+.epc-toolbar,
+.epc-toolbar .toolbar-btn,
+.epc-toolbar .ram-indicator,
+.epc-toolbar .pdf-controls button,
+.epc-toolbar .pdf-controls span,
+.epc-toolbar .pdf-controls input,
+.epc-toolbar .lang-dropdown > button,
+.epc-toolbar .brand-dropdown > button,
+.epc-toolbar .upload-dropdown > button,
+.epc-toolbar .brand-btn,
+.epc-toolbar .lang-btn,
+.toolbar-dropdown-menu .brand-btn,
+.toolbar-dropdown-menu .lang-btn,
+.toolbar-dropdown-menu .dropdown-item {
+  color: var(--epc-blue) !important;
+  font-weight: 600;
+}
+.epc-toolbar .pdf-controls input {
+  color: var(--epc-blue) !important;
+  -webkit-text-fill-color: var(--epc-blue);
+}
+/* 搜尋框保持深色字，方便閱讀 */
+.epc-toolbar .search-group input {
+  color: #0f172a !important;
+  -webkit-text-fill-color: #0f172a !important;
+  font-weight: 400;
+}
+.epc-toolbar .search-group input::placeholder {
+  color: #64748b !important;
+  font-weight: 400;
 }
